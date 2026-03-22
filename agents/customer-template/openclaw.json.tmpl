@@ -1,0 +1,61 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${OPENCLAW_MODEL}"
+      },
+      "contextTokens": 200000,
+      "maxConcurrent": 1
+    },
+    "list": [
+      {
+        "id": "kai-{{CUSTOMER_SLUG}}",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/kai-{{CUSTOMER_SLUG}}/agent",
+        "identity": {
+          "name": "Kai",
+          "emoji": "🤖"
+        }
+      }
+    ]
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groups": {
+        "*": {
+          "requireMention": false,
+          "groupPolicy": "open"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "kai-{{CUSTOMER_SLUG}}-dev"
+    }
+  },
+  "session": {
+    "scope": "per-sender",
+    "reset": {
+      "mode": "daily",
+      "atHour": 4
+    }
+  },
+  "messages": {
+    "responsePrefix": "",
+    "queue": {
+      "mode": "collect",
+      "debounceMs": 1500
+    }
+  },
+  "tools": {
+    "profile": "messaging"
+  }
+}

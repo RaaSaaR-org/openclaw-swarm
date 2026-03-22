@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kira-central
+  namespace: emai-swarm
+  labels:
+    app: kira-central
+    component: agent
+    role: central
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kira-central
+  template:
+    metadata:
+      labels:
+        app: kira-central
+        component: agent
+        role: central
+        emai.io/role: central
+    spec:
+      serviceAccountName: kira-central
+      initContainers:
+        - name: setup
+          image: bitnami/kubectl:latest
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c"]
+          args:
+            - |
+              # Copy identity files into PVC workspace
+              mkdir -p /state/workspace
+              cp /identity/SOUL.md /state/workspace/SOUL.md
+              cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md
+              cp /identity/TOOLS.md /state/workspace/TOOLS.md
+              cp /identity/IDENTITY.md /state/workspace/IDENTITY.md
+              cp /identity/AGENTS.md /state/workspace/AGENTS.md
+              cp /identity/openclaw.json /state/openclaw.json
+              # Install kubectl + swarm-ctl into shared bin volume
+              cp /opt/bitnami/kubectl/bin/kubectl /shared-bin/kubectl
+              cp /scripts/swarm-ctl /shared-bin/swarm-ctl
+              chmod +x /shared-bin/kubectl /shared-bin/swarm-ctl
+              chown -R 1000:1000 /state
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: identity-files
+              mountPath: /identity
+            - name: shared-bin
+              mountPath: /shared-bin
+            - name: swarm-ctl-script
+              mountPath: /scripts
+      containers:
+        - name: openclaw
+          image: ghcr.io/openclaw/openclaw:latest
+          ports:
+            - containerPort: 18789
+              name: gateway
+          env:
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=1536"
+            - name: OPENCLAW_AGENT
+              value: kira
+            - name: OPENCLAW_PROVIDER
+              value: openrouter
+            - name: OPENCLAW_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: kira-config
+                  key: model
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swarm-secrets
+                  key: openrouter-api-key
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: swarm-secrets
+                  key: telegram-bot-token
+            - name: PATH
+              value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/shared-bin"
+            - name: SWARM_NAMESPACE
+              value: "emai-swarm"
+          volumeMounts:
+            - name: state
+              mountPath: /home/node/.openclaw
+            - name: shared-bin
+              mountPath: /shared-bin
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "100m"
+            limits:
+              memory: "2Gi"
+              cpu: "500m"
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: central-hq-pvc
+        - name: identity-files
+          configMap:
+            name: kira-identity
+        - name: swarm-ctl-script
+          configMap:
+            name: swarm-ctl-script
+            defaultMode: 0755
+        - name: shared-bin
+          emptyDir: {}

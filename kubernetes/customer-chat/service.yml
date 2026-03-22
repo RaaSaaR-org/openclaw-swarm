@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-chat
+  namespace: emai-swarm
+  labels:
+    app: customer-chat
+    component: web
+spec:
+  type: ClusterIP
+  selector:
+    app: customer-chat
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http

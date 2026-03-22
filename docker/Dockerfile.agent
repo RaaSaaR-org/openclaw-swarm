@@ -1,0 +1,12 @@
+FROM ghcr.io/openclaw/openclaw:latest
+
+# Ensure .openclaw directory structure exists with correct ownership
+USER root
+RUN mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/agents /home/node/.openclaw/cron /home/node/.openclaw/canvas \
+    && chown -R node:node /home/node/.openclaw
+USER node
+
+EXPOSE 18789
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -q --spider http://localhost:18789/healthz || exit 1

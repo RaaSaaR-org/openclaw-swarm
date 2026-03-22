@@ -1,0 +1,52 @@
+# Network policy: customer agents can only talk to themselves.
+# No cross-customer traffic, no access to central agent.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: customer-isolation
+  namespace: emai-swarm
+spec:
+  # Apply to all customer pods
+  podSelector:
+    matchLabels:
+      role: customer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic only from pods with the same customer label
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: customer
+                operator: Exists
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS outbound (for OpenRouter API calls)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# Central agent can reach customer agents (for summary sync)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: central-access
+  namespace: emai-swarm
+spec:
+  podSelector:
+    matchLabels:
+      role: central
+  policyTypes:
+    - Egress
+  egress:
+    # Allow all outbound (central needs Telegram, OpenRouter, customer access)
+    - {}

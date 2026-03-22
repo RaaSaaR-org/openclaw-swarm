@@ -1,0 +1,70 @@
+services:
+  # Central operations agent
+  kira-central:
+    image: emai-swarm-agent
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: swarm-central
+    volumes:
+      # Persistent OpenClaw home (config, sessions, cron, canvas)
+      - kira-home:/home/node/.openclaw
+      # Workspace files (SOUL.md, HEARTBEAT.md, etc.) — read-only overlay
+      - ../agents/central/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ../agents/central/HEARTBEAT.md:/home/node/.openclaw/workspace/HEARTBEAT.md:ro
+      - ../agents/central/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
+      - ../agents/central/TOOLS.md:/home/node/.openclaw/workspace/TOOLS.md:ro
+      - ../agents/central/IDENTITY.md:/home/node/.openclaw/workspace/IDENTITY.md:ro
+      # Config — mounted after volume so it takes precedence
+      - ../agents/central/openclaw.json:/home/node/.openclaw/openclaw.json
+    env_file: .env
+    ports:
+      - "${CENTRAL_GATEWAY_PORT:-18789}:18789"
+    networks:
+      - internal
+    restart: unless-stopped
+
+  # Demo customer agent A
+  kai-demo-a:
+    image: emai-swarm-agent
+    depends_on:
+      - kira-central
+    container_name: swarm-demo-a
+    volumes:
+      - demo-a-home:/home/node/.openclaw
+      - ../demo/customer-a/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ../demo/customer-a/openclaw.json:/home/node/.openclaw/openclaw.json
+    env_file: .env
+    networks:
+      - customer-a-net
+    restart: unless-stopped
+
+  # Demo customer agent B
+  kai-demo-b:
+    image: emai-swarm-agent
+    depends_on:
+      - kira-central
+    container_name: swarm-demo-b
+    volumes:
+      - demo-b-home:/home/node/.openclaw
+      - ../demo/customer-b/SOUL.md:/home/node/.openclaw/workspace/SOUL.md:ro
+      - ../demo/customer-b/openclaw.json:/home/node/.openclaw/openclaw.json
+    env_file: .env
+    networks:
+      - customer-b-net
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+  customer-a-net:
+    driver: bridge
+    internal: true
+  customer-b-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  kira-home:
+  demo-a-home:
+  demo-b-home:

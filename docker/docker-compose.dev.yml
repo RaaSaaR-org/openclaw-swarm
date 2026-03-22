@@ -1,0 +1,35 @@
+# Development overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  kira-central:
+    # Bind-mount local HQ repo for live editing
+    volumes:
+      - ../agents/central:/workspace/agent:ro
+      - ${LOCAL_HQ_PATH:-../../hq}:/workspace/hq
+
+  kai-demo-a:
+    # Allow external access in dev for debugging
+    networks:
+      - customer-a-net
+      - internal
+    ports:
+      - "${DEMO_A_GATEWAY_PORT:-18790}:18789"
+
+  kai-demo-b:
+    # Allow external access in dev for debugging
+    networks:
+      - customer-b-net
+      - internal
+    ports:
+      - "${DEMO_B_GATEWAY_PORT:-18791}:18789"
+
+networks:
+  internal:
+    driver: bridge
+  customer-a-net:
+    driver: bridge
+    internal: false
+  customer-b-net:
+    driver: bridge
+    internal: false

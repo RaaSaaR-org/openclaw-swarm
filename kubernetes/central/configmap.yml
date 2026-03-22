@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kira-config
+  namespace: emai-swarm
+data:
+  model: "openrouter/stepfun/step-3.5-flash:free"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: central-hq-pvc
+  namespace: emai-swarm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,74 @@
+# Customer agent deployment template.
+# Use with kustomize overlays to create per-customer deployments.
+# Replace CUSTOMER_SLUG and CUSTOMER_NAME with actual values.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-CUSTOMER_SLUG
+  namespace: emai-swarm
+  labels:
+    app: customer-CUSTOMER_SLUG
+    component: agent
+    role: customer
+    customer: CUSTOMER_SLUG
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customer-CUSTOMER_SLUG
+  template:
+    metadata:
+      labels:
+        app: customer-CUSTOMER_SLUG
+        component: agent
+        role: customer
+        customer: CUSTOMER_SLUG
+    spec:
+      containers:
+        - name: openclaw
+          image: ghcr.io/openclaw/openclaw:latest
+          ports:
+            - containerPort: 18789
+              name: gateway
+          env:
+            - name: OPENCLAW_AGENT
+              value: CUSTOMER_SLUG-assistant
+            - name: OPENCLAW_PROVIDER
+              value: openrouter
+            - name: OPENCLAW_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: customer-CUSTOMER_SLUG-config
+                  key: model
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: swarm-secrets
+                  key: openrouter-api-key
+          volumeMounts:
+            - name: agent-identity
+              mountPath: /workspace/agent
+              readOnly: true
+            - name: hq-data
+              mountPath: /workspace/hq
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: agent-identity
+          configMap:
+            name: customer-CUSTOMER_SLUG-identity
+        - name: hq-data
+          persistentVolumeClaim:
+            claimName: customer-CUSTOMER_SLUG-hq-pvc

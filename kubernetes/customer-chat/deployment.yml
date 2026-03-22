@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-chat
+  namespace: emai-swarm
+  labels:
+    app: customer-chat
+    component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customer-chat
+  template:
+    metadata:
+      labels:
+        app: customer-chat
+        component: web
+    spec:
+      containers:
+        - name: chat-ui
+          image: emai-customer-chat:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 2
+            periodSeconds: 10

@@ -1,0 +1,56 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/stepfun/step-3.5-flash:free"
+      },
+      "models": {
+        "openrouter/stepfun/step-3.5-flash:free": {
+          "alias": "step"
+        }
+      },
+      "contextTokens": 200000,
+      "maxConcurrent": 1
+    },
+    "list": [
+      {
+        "id": "customer-agent",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/customer-agent/agent",
+        "identity": {
+          "name": "Kai",
+          "emoji": "🤖"
+        }
+      }
+    ]
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "demo-customer-b-dev"
+    },
+    "controlUi": {
+      "allowedOrigins": ["http://localhost:18791", "http://127.0.0.1:18791"]
+    }
+  },
+  "session": {
+    "scope": "per-sender",
+    "reset": {
+      "mode": "daily",
+      "atHour": 4
+    }
+  },
+  "messages": {
+    "responsePrefix": "",
+    "queue": {
+      "mode": "collect",
+      "debounceMs": 1500
+    }
+  },
+  "tools": {
+    "profile": "messaging"
+  }
+}

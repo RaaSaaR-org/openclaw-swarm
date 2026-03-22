@@ -1,0 +1,18 @@
+apiVersion: swarm.emai.io/v1alpha1
+kind: KaiInstance
+metadata:
+  name: kai-acme-gmbh
+  namespace: emai-swarm
+spec:
+  customerName: "Acme GmbH"
+  projectName: "Robot Pilot Project"
+  gatewayAuth:
+    mode: "token"
+    token: "acme-dev-token"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "100m"
+    limits:
+      memory: "2Gi"
+      cpu: "500m"

@@ -1,0 +1,38 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - curl
+  - jq
+
+write_files:
+  - path: /opt/swarm/.env
+    permissions: "0600"
+    content: |
+      OPENROUTER_API_KEY=${openrouter_api_key}
+      TELEGRAM_BOT_TOKEN=${telegram_bot_token}
+      TELEGRAM_CHAT_ID=${telegram_chat_id}
+      OPENCLAW_MODEL=meta-llama/llama-3.3-70b-instruct:free
+
+runcmd:
+  # Enable Docker
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Clone swarm repo
+  - git clone ${swarm_repo_url} /opt/swarm/repo
+
+  # Copy env file into docker directory
+  - cp /opt/swarm/.env /opt/swarm/repo/docker/.env
+
+  # Build and start
+  - cd /opt/swarm/repo/docker && docker compose build
+  - cd /opt/swarm/repo/docker && docker compose up -d
+
+  # Set up daily backup cron
+  - echo "0 3 * * * root /opt/swarm/repo/scripts/backup.sh /opt/swarm/backups" > /etc/cron.d/swarm-backup

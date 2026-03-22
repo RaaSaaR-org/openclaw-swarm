@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: emai-swarm
+
+resources:
+  - namespace.yml
+  - central/deployment.yml
+  - central/service.yml
+  - central/configmap.yml
+  - central/serviceaccount.yml
+  - central/rbac.yml
+  - customer/networkpolicy.yml
+
+commonLabels:
+  app.kubernetes.io/part-of: emai-swarm
+  app.kubernetes.io/managed-by: kustomize

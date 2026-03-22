@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kira-central
+  namespace: emai-swarm
+  labels:
+    app: kira-central
+spec:
+  type: ClusterIP
+  selector:
+    app: kira-central
+  ports:
+    - name: gateway
+      port: 18789
+      targetPort: gateway
+      protocol: TCP

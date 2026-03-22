@@ -1,0 +1,28 @@
+# Secrets
+docker/.env
+terraform/*.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+
+# Customer data (provisioned at runtime)
+customers/
+data/
+backups/
+archive/
+
+# Build / Dependencies
+node_modules/
+dist/
+
+# OS
+.DS_Store
+.env
+
+# IDE
+.claude/
+
+# Test artifacts
+*.png
+.playwright-mcp/

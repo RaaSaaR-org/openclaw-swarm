@@ -1,0 +1,19 @@
+apiVersion: swarm.emai.io/v1alpha1
+kind: KaiInstance
+metadata:
+  name: kai-demo-customer-b
+  namespace: emai-swarm
+spec:
+  customerName: "Demo Customer B"
+  projectName: "Research Collaboration"
+  customerSlug: "demo-customer-b"
+  gatewayAuth:
+    mode: "token"
+    token: "demo-b-dev-token"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "100m"
+    limits:
+      memory: "2Gi"
+      cpu: "500m"

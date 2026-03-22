@@ -1,0 +1,69 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/stepfun/step-3.5-flash:free"
+      },
+      "models": {
+        "openrouter/stepfun/step-3.5-flash:free": {
+          "alias": "step"
+        }
+      },
+      "contextTokens": 200000,
+      "maxConcurrent": 2
+    },
+    "list": [
+      {
+        "id": "kira",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/kira/agent",
+        "identity": {
+          "name": "Kira",
+          "emoji": "🤖"
+        }
+      }
+    ]
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groups": {
+        "*": {
+          "requireMention": false,
+          "groupPolicy": "open"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "change-me-central-dev"
+    },
+    "controlUi": {
+      "allowedOrigins": ["http://localhost:18789", "http://127.0.0.1:18789"]
+    }
+  },
+  "session": {
+    "scope": "per-sender",
+    "reset": {
+      "mode": "daily",
+      "atHour": 4
+    }
+  },
+  "messages": {
+    "responsePrefix": "",
+    "queue": {
+      "mode": "collect",
+      "debounceMs": 1500
+    }
+  },
+  "tools": {
+    "profile": "coding"
+  }
+}
