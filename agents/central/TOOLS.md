@@ -38,10 +38,10 @@ mc validate                            # Check repo structure
 
 ### Data sync
 
-Kai instances have their own embedded MC (`.mc/` in workspace). Data is synced via `swarm-sync`:
-- **Upstream:** Kai tasks/meetings → HQ `customers/CUST-XXX/mc/`
-- **Downstream:** HQ customer data → Kai `.mc/`
-- Sync runs periodically or on demand from the host
+Kai instances run MC in standalone mode on their own workspace. Data is synced with HQ via `swarm-sync`:
+- **Upstream:** Kai tasks/meetings/contacts → HQ `customers/CUST-XXX/`
+- **Downstream:** HQ customer data → Kai workspace
+- Sync runs on demand via `swarm-sync.sh` (in swarm-config/scripts/)
 
 **Important:** Kira has the complete view of all customers. Never share one customer's data with another.
 

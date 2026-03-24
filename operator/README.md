@@ -1,135 +1,104 @@
-# operator
-// TODO(user): Add simple overview of use/purpose
+# EmAI Swarm Operator
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Kubernetes operator that manages per-customer **Kai** agent instances in the EmAI Swarm. Each `KaiInstance` custom resource is reconciled into a full set of Kubernetes workloads: Deployment, Service, PVC, ConfigMap, NetworkPolicy, and (optionally) Ingress.
 
-## Getting Started
+Kai instances run the OpenClaw agent image (`ghcr.io/openclaw/openclaw:latest`) with customer-specific identity files (SOUL.md, HEARTBEAT.md, openclaw.json) rendered from templates. The central agent **Kira** provisions Kai instances via `swarm-ctl`, which wraps kubectl for KaiInstance CRUD.
 
-### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+## KaiInstance CRD
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+**Group:** `swarm.emai.io/v1alpha1` &nbsp;|&nbsp; **Kind:** `KaiInstance`
 
-```sh
-make docker-build docker-push IMG=<some-registry>/operator:tag
-```
+### Spec Fields
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `customerName` | string | yes | Display name (e.g. "Acme GmbH") |
+| `projectName` | string | yes | Project context for the agent |
+| `customerSlug` | string | no | DNS-safe identifier; auto-derived from `customerName` if omitted. Immutable once set. |
+| `model` | string | no | LLM model override (default: `openrouter/stepfun/step-3.5-flash:free`) |
+| `telegram.botTokenSecretRef` | string | no | Secret name containing key `bot-token` for Telegram integration |
+| `gatewayAuth.mode` | `none` \| `token` | no | Gateway auth mode |
+| `gatewayAuth.token` | string | no | Shared auth token (when mode=token) |
+| `resources` | ResourceRequirements | no | Container resource overrides (default: 1Gi/100m request, 2Gi/500m limit) |
+| `suspended` | bool | no | Scales Deployment to 0 without deleting state |
+| `externalAccess` | bool | no | Create Ingress for external access (default: true) |
 
-**Install the CRDs into the cluster:**
+### Status
 
-```sh
+Phase lifecycle: `Provisioning` → `Running` → `Suspended` / `Failed`
+
+Status exposes `gatewayURL` (in-cluster), `externalURL` (public), `ready`, `configHash`, and conditions for each child resource.
+
+## Managed Resources
+
+For each KaiInstance with slug `<slug>`, the operator creates:
+
+| Resource | Name | Purpose |
+|----------|------|---------|
+| ConfigMap | `kai-<slug>-identity` | SOUL.md, HEARTBEAT.md, openclaw.json |
+| PVC | `kai-<slug>-state` | 1Gi persistent agent state |
+| Deployment | `kai-<slug>` | OpenClaw agent pod (init container copies identity into PVC) |
+| Service | `kai-<slug>` | ClusterIP on port 18789 (gateway) |
+| NetworkPolicy | `kai-<slug>-isolation` | Ingress/egress isolation (see below) |
+| Ingress | `kai-<slug>-ws` | Traefik Ingress with TLS (if `externalAccess` enabled) |
+
+All child resources have `ownerReference` set — deleting a KaiInstance cascades cleanup.
+
+## Customer Isolation
+
+Each Kai pod is network-isolated via a NetworkPolicy:
+
+- **Ingress:** only from pods with label `emai.io/role: central` (Kira)
+- **Egress:** DNS (port 53) and HTTPS (port 443) only — sufficient for OpenRouter and Telegram APIs
+- **No K8s API access:** `automountServiceAccountToken: false`
+
+Kai pods cannot communicate with each other or with any cluster service besides DNS.
+
+## Quick Start
+
+```bash
+# Prerequisites: Go 1.24+, kubectl, access to a K8s cluster (k3d for local dev)
+
+# Install CRDs
 make install
+
+# Run controller locally (outside cluster)
+make run
+
+# Or deploy to cluster
+make docker-build docker-push IMG=ghcr.io/emai-ai/swarm-operator:latest
+make deploy IMG=ghcr.io/emai-ai/swarm-operator:latest
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+## Example KaiInstance
 
-```sh
-make deploy IMG=<some-registry>/operator:tag
+```yaml
+apiVersion: swarm.emai.io/v1alpha1
+kind: KaiInstance
+metadata:
+  name: acme
+  namespace: emai-swarm
+spec:
+  customerName: "Acme GmbH"
+  projectName: "PROJ-001 Website Relaunch"
+  telegram:
+    botTokenSecretRef: acme-telegram-token
+  gatewayAuth:
+    mode: token
+    token: "secret-gateway-token"
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
-kubectl apply -k config/samples/
+```bash
+kubectl apply -f acme.yaml
+kubectl get kaiinstances
+# NAME   CUSTOMER    PHASE     READY   GATEWAY                              EXTERNAL                           AGE
+# acme   Acme GmbH   Running   true    kai-acme.emai-swarm.svc:18789       https://kai.emai.dev/ws/acme       2m
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+## Uninstall
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
+```bash
+kubectl delete kaiinstances --all -n emai-swarm   # remove instances (cascades child resources)
+make undeploy                                       # remove controller
+make uninstall                                      # remove CRDs
 ```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/operator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
-
-## License
-
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
