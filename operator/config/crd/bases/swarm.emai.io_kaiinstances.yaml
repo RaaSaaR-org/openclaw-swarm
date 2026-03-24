@@ -27,6 +27,9 @@ spec:
     - jsonPath: .status.gatewayURL
       name: Gateway
       type: string
+    - jsonPath: .status.externalURL
+      name: External
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -70,6 +73,11 @@ spec:
                 maxLength: 63
                 pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
                 type: string
+              externalAccess:
+                description: |-
+                  externalAccess controls whether an Ingress is created for external access.
+                  Defaults to true when omitted.
+                type: boolean
               gatewayAuth:
                 description: gatewayAuth configures the gateway authentication mode.
                 properties:
@@ -242,6 +250,10 @@ spec:
               customerSlug:
                 description: customerSlug is the resolved slug (derived from spec
                   or auto-generated).
+                type: string
+              externalURL:
+                description: externalURL is the public URL for the agent's gateway
+                  (set when Ingress is created).
                 type: string
               gatewayURL:
                 description: gatewayURL is the in-cluster URL for the agent's gateway.

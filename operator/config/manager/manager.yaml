@@ -65,6 +65,11 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
+        env:
+          - name: INGRESS_DOMAIN
+            value: "kai.emai.dev"
+          - name: INGRESS_TLS_SECRET
+            value: "kai-emai-dev-tls"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true

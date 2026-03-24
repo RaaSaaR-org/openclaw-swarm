@@ -178,9 +178,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	ingressDomain := os.Getenv("INGRESS_DOMAIN")
+	if ingressDomain == "" {
+		ingressDomain = "kai.emai.dev"
+	}
+	ingressTLSSecret := os.Getenv("INGRESS_TLS_SECRET")
+	if ingressTLSSecret == "" {
+		ingressTLSSecret = "kai-emai-dev-tls"
+	}
+
 	if err := (&controller.KaiInstanceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		IngressDomain:    ingressDomain,
+		IngressTLSSecret: ingressTLSSecret,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "KaiInstance")
 		os.Exit(1)

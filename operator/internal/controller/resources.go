@@ -153,7 +153,7 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 
 	// Init container copies ConfigMap files into the PVC so the workspace is writable
 	// (OpenClaw needs to create USER.md, MEMORY.md at runtime)
-	initScript := `mkdir -p /state/workspace && cp /identity/SOUL.md /state/workspace/SOUL.md && cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
+	initScript := `mkdir -p /state/customer-workspace && cp /identity/SOUL.md /state/customer-workspace/SOUL.md && cp /identity/HEARTBEAT.md /state/customer-workspace/HEARTBEAT.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -340,4 +340,60 @@ func buildNetworkPolicy(kai *swarmv1alpha1.KaiInstance, slug string) *networking
 // gatewayURL returns the in-cluster gateway URL for a KaiInstance.
 func gatewayURL(namespace, slug string) string {
 	return fmt.Sprintf("%s.%s.svc:%d", childName(slug), namespace, gatewayPort)
+}
+
+// externalURL returns the public URL for a KaiInstance.
+func externalURL(domain, slug string) string {
+	return fmt.Sprintf("https://%s/ws/%s", domain, slug)
+}
+
+// buildIngress creates the Traefik Ingress for external WebSocket access to a Kai agent.
+func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string) *networkingv1.Ingress {
+	name := childName(slug)
+	pathType := networkingv1.PathTypePrefix
+	ingressClass := "traefik"
+	return &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name + "-ws",
+			Namespace: kai.Namespace,
+			Labels:    commonLabels(slug),
+			Annotations: map[string]string{
+				"traefik.ingress.kubernetes.io/router.entrypoints": "web,websecure",
+				"traefik.ingress.kubernetes.io/router.tls":         "true",
+				"cert-manager.io/cluster-issuer":                   "letsencrypt-prod",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: &ingressClass,
+			TLS: []networkingv1.IngressTLS{
+				{
+					Hosts:      []string{domain},
+					SecretName: tlsSecret,
+				},
+			},
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: domain,
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/ws/" + slug,
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: name,
+											Port: networkingv1.ServiceBackendPort{
+												Number: gatewayPort,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }

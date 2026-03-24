@@ -4,6 +4,8 @@
       "model": {
         "primary": "${OPENCLAW_MODEL}"
       },
+      "workspace": "/home/node/.openclaw/customer-workspace",
+      "skipBootstrap": true,
       "contextTokens": 200000,
       "maxConcurrent": 1
     },
@@ -11,8 +13,7 @@
       {
         "id": "kai-{{CUSTOMER_SLUG}}",
         "default": true,
-        "workspace": "/home/node/.openclaw/workspace",
-        "agentDir": "/home/node/.openclaw/agents/kai-{{CUSTOMER_SLUG}}/agent",
+        "workspace": "/home/node/.openclaw/customer-workspace",
         "identity": {
           "name": "Kai",
           "emoji": "🤖"
@@ -36,9 +37,18 @@
   "gateway": {
     "port": 18789,
     "bind": "lan",
+    "trustedProxies": ["10.0.0.0/8", "172.16.0.0/12"],
     "auth": {
       "mode": "token",
       "token": "kai-{{CUSTOMER_SLUG}}-dev"
+    },
+    "controlUi": {
+      "basePath": "/ws/{{CUSTOMER_SLUG}}",
+      "allowInsecureAuth": true,
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "https://kai.emai.dev"
+      ]
     }
   },
   "session": {

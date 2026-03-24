@@ -38,7 +38,9 @@ import (
 // KaiInstanceReconciler reconciles a KaiInstance object.
 type KaiInstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme           *runtime.Scheme
+	IngressDomain    string // from env INGRESS_DOMAIN, default "kai.emai.dev"
+	IngressTLSSecret string // from env INGRESS_TLS_SECRET, default "kai-emai-dev-tls"
 }
 
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances,verbs=get;list;watch;create;update;patch;delete
@@ -47,6 +49,7 @@ type KaiInstanceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps;services;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -119,11 +122,19 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.reconcileNetworkPolicy(ctx, &kai, slug); err != nil {
 		return ctrl.Result{}, r.setFailed(ctx, &kai, "NetworkPolicyError", err)
 	}
+	if err := r.reconcileIngress(ctx, &kai, slug); err != nil {
+		return ctrl.Result{}, r.setFailed(ctx, &kai, "IngressError", err)
+	}
 
 	// 7. Check deployment readiness
 	ready := r.isDeploymentReady(ctx, kai.Namespace, slug)
 	kai.Status.Ready = ready
 	kai.Status.GatewayURL = gatewayURL(kai.Namespace, slug)
+	if kai.Spec.ExternalAccess == nil || *kai.Spec.ExternalAccess {
+		kai.Status.ExternalURL = externalURL(r.IngressDomain, slug)
+	} else {
+		kai.Status.ExternalURL = ""
+	}
 	if ready {
 		kai.Status.Phase = swarmv1alpha1.PhaseRunning
 	}
@@ -250,6 +261,45 @@ func (r *KaiInstanceReconciler) reconcileService(ctx context.Context, kai *swarm
 	return r.Update(ctx, &existing)
 }
 
+// reconcileIngress creates, updates, or deletes the external access Ingress.
+func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+	ingressName := childName(slug) + "-ws"
+
+	// If external access is explicitly disabled, delete existing Ingress if present
+	if kai.Spec.ExternalAccess != nil && !*kai.Spec.ExternalAccess {
+		var existing networkingv1.Ingress
+		err := r.Get(ctx, types.NamespacedName{Name: ingressName, Namespace: kai.Namespace}, &existing)
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return r.Delete(ctx, &existing)
+	}
+
+	desired := buildIngress(kai, slug, r.IngressDomain, r.IngressTLSSecret)
+	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	var existing networkingv1.Ingress
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
+	if apierrors.IsNotFound(err) {
+		r.setCondition(kai, swarmv1alpha1.ConditionIngressReady, metav1.ConditionTrue, "Created", "Ingress created")
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	existing.Annotations = desired.Annotations
+	r.setCondition(kai, swarmv1alpha1.ConditionIngressReady, metav1.ConditionTrue, "Updated", "Ingress up to date")
+	return r.Update(ctx, &existing)
+}
+
 // reconcileNetworkPolicy creates or updates the isolation NetworkPolicy.
 func (r *KaiInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
 	desired := buildNetworkPolicy(kai, slug)
@@ -323,6 +373,7 @@ func (r *KaiInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&networkingv1.Ingress{}).
 		Named("kaiinstance").
 		Complete(r)
 }

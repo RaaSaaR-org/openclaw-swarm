@@ -59,6 +59,11 @@ type KaiInstanceSpec struct {
 	// suspended stops the agent without deleting state. The Deployment is scaled to 0.
 	// +optional
 	Suspended bool `json:"suspended,omitempty"`
+
+	// externalAccess controls whether an Ingress is created for external access.
+	// Defaults to true when omitted.
+	// +optional
+	ExternalAccess *bool `json:"externalAccess,omitempty"`
 }
 
 // TelegramConfig holds Telegram bot integration settings.
@@ -95,6 +100,7 @@ const (
 	ConditionDeploymentAvailable  = "DeploymentAvailable"
 	ConditionNetworkPolicyApplied = "NetworkPolicyApplied"
 	ConditionPVCBound             = "PVCBound"
+	ConditionIngressReady         = "IngressReady"
 )
 
 // KaiInstanceStatus defines the observed state of KaiInstance.
@@ -110,6 +116,10 @@ type KaiInstanceStatus struct {
 	// gatewayURL is the in-cluster URL for the agent's gateway.
 	// +optional
 	GatewayURL string `json:"gatewayURL,omitempty"`
+
+	// externalURL is the public URL for the agent's gateway (set when Ingress is created).
+	// +optional
+	ExternalURL string `json:"externalURL,omitempty"`
 
 	// customerSlug is the resolved slug (derived from spec or auto-generated).
 	// +optional
@@ -132,6 +142,7 @@ type KaiInstanceStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
 // +kubebuilder:printcolumn:name="Gateway",type=string,JSONPath=`.status.gatewayURL`
+// +kubebuilder:printcolumn:name="External",type=string,JSONPath=`.status.externalURL`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // KaiInstance is the Schema for the kaiinstances API.

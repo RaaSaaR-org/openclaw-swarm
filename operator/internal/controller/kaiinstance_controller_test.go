@@ -51,7 +51,10 @@ var _ = Describe("KaiInstance Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: swarmv1alpha1.KaiInstanceSpec{
+						CustomerName: "Test Customer",
+						ProjectName:  "Test Project",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -69,8 +72,10 @@ var _ = Describe("KaiInstance Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &KaiInstanceReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				IngressDomain:    "kai.emai.dev",
+				IngressTLSSecret: "kai-emai-dev-tls",
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
