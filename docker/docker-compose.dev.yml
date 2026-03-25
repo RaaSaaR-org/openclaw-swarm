@@ -6,7 +6,7 @@ services:
     # Bind-mount local HQ repo for live editing
     volumes:
       - ../agents/central:/workspace/agent:ro
-      - ${LOCAL_HQ_PATH:-../../hq}:/workspace/hq
+      - ${LOCAL_HQ_PATH:-../../headquarter}:/workspace/hq
 
   kai-demo-a:
     # Allow external access in dev for debugging
