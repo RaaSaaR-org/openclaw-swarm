@@ -33,8 +33,8 @@ echo "Archiving HQ repository..."
 mkdir -p "$ARCHIVE_DIR"
 ARCHIVE_NAME="${CUSTOMER_SLUG}-$(date +%Y%m%d-%H%M%S)"
 
-if [ -d "$CUSTOMER_DIR/hq/.git" ]; then
-    (cd "$CUSTOMER_DIR/hq" && git bundle create "$ARCHIVE_DIR/${ARCHIVE_NAME}.bundle" --all)
+if [ -d "$CUSTOMER_DIR/headquarter/.git" ]; then
+    (cd "$CUSTOMER_DIR/headquarter" && git bundle create "$ARCHIVE_DIR/${ARCHIVE_NAME}.bundle" --all)
     echo "    Git bundle: $ARCHIVE_DIR/${ARCHIVE_NAME}.bundle"
 fi
 

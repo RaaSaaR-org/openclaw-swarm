@@ -153,7 +153,7 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 
 	// Init container copies ConfigMap files into the PVC so the workspace is writable
 	// (OpenClaw needs to create USER.md, MEMORY.md at runtime)
-	initScript := `mkdir -p /state/customer-workspace && cp /identity/SOUL.md /state/customer-workspace/SOUL.md && cp /identity/HEARTBEAT.md /state/customer-workspace/HEARTBEAT.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
+	initScript := `mkdir -p /state/workspace && cp /identity/SOUL.md /state/workspace/SOUL.md && cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

@@ -21,7 +21,7 @@ echo "    Project: $PROJECT_NAME"
 # --- Create customer directories ---
 CUSTOMER_DIR="$SWARM_DIR/customers/$CUSTOMER_SLUG"
 AGENT_DIR="$CUSTOMER_DIR/agent"
-HQ_DIR="$CUSTOMER_DIR/hq"
+HQ_DIR="$CUSTOMER_DIR/headquarter"
 
 if [ -d "$CUSTOMER_DIR" ]; then
     echo "ERROR: Customer directory already exists: $CUSTOMER_DIR"
@@ -72,7 +72,7 @@ services:
     container_name: swarm-kai-${CUSTOMER_SLUG}
     volumes:
       - ../customers/${CUSTOMER_SLUG}/agent:/workspace/agent:ro
-      - ../customers/${CUSTOMER_SLUG}/hq:/workspace/hq
+      - ../customers/${CUSTOMER_SLUG}/headquarter:/workspace/headquarter
     env_file: .env
     environment:
       - OPENCLAW_AGENT=kai-${CUSTOMER_SLUG}

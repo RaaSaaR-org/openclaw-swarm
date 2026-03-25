@@ -51,7 +51,7 @@ spec:
               mountPath: /workspace/agent
               readOnly: true
             - name: hq-data
-              mountPath: /workspace/hq
+              mountPath: /workspace/headquarter
           livenessProbe:
             httpGet:
               path: /healthz

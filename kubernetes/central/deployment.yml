@@ -137,7 +137,7 @@ spec:
           command: ["sh", "-c"]
           args:
             - |
-              HQ=/home/node/.openclaw/workspace/hq
+              HQ=/home/node/.openclaw/workspace/headquarter
               MC=/shared-bin/mc
               # Wait for mc binary and HQ repo
               until [ -f $MC ] && [ -f $HQ/config/config.yml ]; do

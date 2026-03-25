@@ -4,8 +4,8 @@
 
 **Binary:** mc (on PATH via /shared-bin)
 **Mode:** CLI tool (run via shell exec, like swarm-ctl)
-**Working directory:** /home/node/.openclaw/workspace/hq
-**Usage:** `cd /home/node/.openclaw/workspace/hq && mc <command>`
+**Working directory:** /home/node/.openclaw/workspace/headquarter
+**Usage:** `cd /home/node/.openclaw/workspace/headquarter && mc <command>`
 
 HQ knowledge base with customers, projects, tasks, meetings, research, sprints, contacts.
 
@@ -122,4 +122,4 @@ For research topic exploration and market intelligence.
 
 ## File Operations
 
-Read and write files in the HQ repository at /home/node/.openclaw/workspace/hq.
+Read and write files in the HQ repository at /home/node/.openclaw/workspace/headquarter.

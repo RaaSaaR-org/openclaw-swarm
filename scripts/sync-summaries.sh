@@ -14,7 +14,7 @@ mkdir -p "$SUMMARY_DIR"
 
 sync_customer() {
     local slug="$1"
-    local hq_dir="$CUSTOMERS_DIR/$slug/hq"
+    local hq_dir="$CUSTOMERS_DIR/$slug/headquarter"
     local container="swarm-kai-${slug}"
 
     if [ ! -d "$hq_dir" ]; then

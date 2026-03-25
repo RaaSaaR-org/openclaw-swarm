@@ -21,9 +21,9 @@ if [ -d "$CUSTOMERS_DIR" ]; then
         echo "Backing up: $slug"
 
         # Git bundle (captures full history)
-        if [ -d "$customer_dir/hq/.git" ]; then
-            (cd "$customer_dir/hq" && git bundle create "$BACKUP_DIR/${slug}-hq.bundle" --all)
-            echo "  Git bundle: ${slug}-hq.bundle"
+        if [ -d "$customer_dir/headquarter/.git" ]; then
+            (cd "$customer_dir/headquarter" && git bundle create "$BACKUP_DIR/${slug}-headquarter.bundle" --all)
+            echo "  Git bundle: ${slug}-headquarter.bundle"
         fi
 
         # Agent config backup

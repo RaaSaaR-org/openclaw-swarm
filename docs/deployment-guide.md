@@ -285,7 +285,7 @@ The operator creates per-customer NetworkPolicies:
 
 # Creates:
 # - customers/<slug>/agent/  — SOUL.md, HEARTBEAT.md, openclaw.json
-# - customers/<slug>/hq/     — mc-initialized HQ repo
+# - customers/<slug>/headquarter/     — mc-initialized HQ repo
 # - docker/docker-compose.kai-<slug>.yml — Docker Compose override
 
 # Then start:
