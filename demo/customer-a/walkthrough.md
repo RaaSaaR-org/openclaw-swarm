@@ -20,7 +20,7 @@ docker compose up -d
 
 **Input:** "Was ist der aktuelle Projektstatus?"
 
-**Expected:** The agent calls `mc get_status` and returns an overview of entity counts, open tasks, and upcoming meetings.
+**Expected:** The agent calls `./mc -y status` and returns an overview of entity counts, open tasks, and upcoming meetings.
 
 ### 2. Create a task
 

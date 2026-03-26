@@ -5,35 +5,37 @@
 **Binary:** mc (on PATH via /shared-bin)
 **Mode:** CLI tool (run via shell exec, like swarm-ctl)
 **Working directory:** /home/node/.openclaw/workspace/headquarter
-**Usage:** `cd /home/node/.openclaw/workspace/headquarter && mc <command>`
+**Usage:** `cd /home/node/.openclaw/workspace/headquarter && mc -y <command>`
 
 HQ knowledge base with customers, projects, tasks, meetings, research, sprints, contacts.
+
+**Note:** Always use `-y` flag to skip interactive confirmations (required in non-TTY environments like agent shells).
 
 ### Common commands
 
 ```bash
 # Overview
-mc status                              # Dashboard with entity counts
-mc list customers                      # List all customers
-mc list tasks --status todo            # List tasks by status
-mc list tasks --customer CUST-005      # List tasks for a customer
-mc list tasks --project PROJ-001       # List tasks for a project
+mc -y status                              # Dashboard with entity counts
+mc -y list customers                      # List all customers
+mc -y list tasks --status todo            # List tasks by status
+mc -y list tasks --customer CUST-005      # List tasks for a customer
+mc -y list tasks --project PROJ-001       # List tasks for a project
 
 # Details
-mc show TASK-001                       # Show entity details
-mc show CUST-005                       # Show customer details
+mc -y show TASK-001                       # Show entity details
+mc -y show CUST-005                       # Show customer details
 
-# Create (interactive — confirm with Enter)
-mc new task "Task title"               # Create task
-mc new meeting "Meeting title"         # Create meeting
-mc new research "Topic"                # Create research topic
+# Create
+mc -y new task "Task title"               # Create task
+mc -y new meeting "Meeting title"         # Create meeting
+mc -y new research "Topic"                # Create research topic
 
 # Update
-mc move TASK-001 --status done         # Move task to done
+mc -y move TASK-001 --status done         # Move task to done
 
 # Maintenance
-mc index                               # Rebuild JSON indexes after manual edits
-mc validate                            # Check repo structure
+mc -y index                               # Rebuild JSON indexes after manual edits
+mc -y validate                            # Check repo structure
 ```
 
 ### Data sync
