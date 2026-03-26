@@ -4,12 +4,7 @@ Multi-instance deployment platform for [OpenClaw](https://docs.openclaw.ai) AI a
 
 ## Architecture
 
-```mermaid
-graph LR
-    OP[Operator] -->|KaiInstance CRD| K[Kai Pods]
-    Chat[Chat UI] -->|WebSocket| K
-    K -->|isolated| K
-```
+A **Swarm Operator** watches `KaiInstance` custom resources and creates an isolated OpenClaw pod per customer. The **Chat UI** connects to each pod via WebSocket.
 
 Each customer gets:
 - **Isolated OpenClaw instance** in its own pod with PVC

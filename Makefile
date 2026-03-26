@@ -14,12 +14,11 @@ help: ## Show this help
 ##@ Development
 
 .PHONY: dev
-dev: dev-cluster dev-chat dev-operator ## Set up local dev environment (k3d + all services)
+dev: dev-cluster install-crds ## Set up local dev environment (then run dev-operator + dev-chat)
 	@echo ""
-	@echo "Dev environment ready!"
-	@echo "  Operator:  running locally (make dev-operator in another terminal)"
-	@echo "  Chat UI:   http://localhost:3001"
-	@echo "  Next:      deploy with your swarm-config repo (./deploy.sh dev)"
+	@echo "Dev cluster ready! Now run in separate terminals:"
+	@echo "  make dev-operator   # Terminal 1: run the operator"
+	@echo "  make dev-chat       # Terminal 2: run the chat UI (http://localhost:3000)"
 
 .PHONY: dev-cluster
 dev-cluster: ## Create k3d cluster (if not exists)
