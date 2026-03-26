@@ -8,6 +8,10 @@ permissions:
   contents: write
   packages: write
 
+env:
+  REGISTRY: ghcr.io
+  REPO: ${{ github.repository }}
+
 jobs:
   operator-image:
     name: Build Operator Image
@@ -28,9 +32,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version
-        id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Extract metadata
+        id: meta
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/$REPO_LC/operator" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -38,9 +46,10 @@ jobs:
           context: operator
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: VERSION=${{ steps.meta.outputs.tag }}
           tags: |
-            ghcr.io/${{ github.repository }}/operator:${{ steps.version.outputs.tag }}
-            ghcr.io/${{ github.repository }}/operator:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest
 
   chat-image:
     name: Build Chat Image
@@ -61,9 +70,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version
-        id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Extract metadata
+        id: meta
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/$REPO_LC/customer-chat" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -72,8 +85,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/customer-chat:${{ steps.version.outputs.tag }}
-            ghcr.io/${{ github.repository }}/customer-chat:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest
 
   install-manifest:
     name: Generate Install Manifest
@@ -86,14 +99,18 @@ jobs:
         with:
           go-version-file: operator/go.mod
 
-      - name: Extract version
-        id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Extract metadata
+        id: meta
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/$REPO_LC/operator" >> $GITHUB_OUTPUT
 
       - name: Generate install.yaml
         run: |
           cd operator
-          IMG=ghcr.io/${{ github.repository }}/operator:${{ steps.version.outputs.tag }} make build-installer
+          IMG=${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }} make build-installer
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
