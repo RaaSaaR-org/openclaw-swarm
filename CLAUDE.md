@@ -29,10 +29,10 @@ Customer instances are managed by the **Swarm Operator** via `KaiInstance` CRDs.
 - **SOUL.md**: Defines an agent's personality, scope, and operating rules. Loaded at session start.
 - **openclaw.json**: Main config file (JSON5). Defines `agents.list[]`, `channels`, `gateway`, `session`, `tools`.
 - **OpenRouter**: LLM provider. Configurable model per instance.
-- **MissionControl (mc)**: Rust CLI/MCP server for managing HQ repos.
 - **Swarm Operator**: K8s operator (Go/Kubebuilder) that reconciles `KaiInstance` CRDs into workloads.
 - **swarm-ctl**: CLI wrapper for kubectl — the central agent uses it to provision/manage customer instances.
 - **Customer Chat UI**: Vite + TypeScript web chat at `web/customer-chat/` — connects via WebSocket with Ed25519 device auth.
+- **Private config repo**: Deployments typically have a sibling `swarm-config/` repo with business-specific overlays (secrets, customer identities, K8s manifest overrides). This repo is the generic platform only.
 
 ## Directory Layout
 
@@ -114,15 +114,17 @@ Config lives at `/home/node/.openclaw/openclaw.json` inside the container. Key s
 
 Located at `/home/node/.openclaw/workspace/` — loaded at session start:
 
-| File | Purpose |
-|------|---------|
-| SOUL.md | Persona, tone, boundaries, operating rules |
-| AGENTS.md | Operating instructions, agent registry |
-| HEARTBEAT.md | Cron/scheduled task checklist |
-| IDENTITY.md | Company identity context |
-| TOOLS.md | Available tool documentation |
-| USER.md | User context (auto-created by OpenClaw) |
-| MEMORY.md | Persistent memory (auto-managed) |
+| File | Purpose | Source |
+|------|---------|--------|
+| SOUL.md | Persona, tone, boundaries, project context | Operator template, overridden per-customer |
+| AGENTS.md | Operating instructions, session startup, memory protocol | Operator template |
+| TOOLS.md | Local environment notes (paths, URLs, credentials) | Operator template, overridden per-customer |
+| HEARTBEAT.md | Periodic scheduled task checklist | Operator template, overridden per-customer |
+| USER.md | Customer contacts, roles, preferences | Per-customer (from onboard.sh) |
+| IDENTITY.md | Agent name, emoji, vibe | Auto-created by OpenClaw |
+| MEMORY.md | Persistent long-term memory | Auto-managed by agent |
+| memory/ | Daily session logs | Auto-managed by agent |
+| skills/mc/SKILL.md | MissionControl CLI skill | Operator template |
 
 ## Docker Compose Commands (dev)
 
@@ -143,4 +145,4 @@ When troubleshooting OpenClaw issues (gateway, config, channels, pairing, CLI co
 - Gateway auth: always token-based (gateway refuses `auth: "none"` with `bind: "lan"`)
 - OpenClaw needs ~1Gi+ RAM and `NODE_OPTIONS=--max-old-space-size=1536`
 - OpenClaw startup takes 60s+ — liveness probe initialDelaySeconds must be >= 60
-- Tools profile: `"coding"` for central agent, `"messaging"` for customer agents (not `"minimal"` — breaks file reading)
+- Tools profile: `"coding"` for all agents (central + customer). Allows shell access for CLI tools like `mc`. Do not use `"messaging"` (blocks shell) or `"minimal"` (breaks file reading)

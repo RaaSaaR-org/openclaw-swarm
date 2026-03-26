@@ -274,7 +274,7 @@ The operator creates per-customer NetworkPolicies:
 ### Important notes
 - OpenClaw needs ~1Gi+ RAM and 60s+ startup time
 - Gateway requires token auth when bound to LAN (no `auth: "none"`)
-- Tools profile for customer agents: `"messaging"` (not `"minimal"`)
+- Tools profile for all agents: `"coding"` (enables shell access for mc CLI; `"messaging"` blocks shell, `"minimal"` breaks file reading)
 
 ---
 
