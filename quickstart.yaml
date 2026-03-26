@@ -1,0 +1,40 @@
+# OpenClaw Swarm Quickstart
+#
+# 1. Install the operator:
+#    kubectl apply -f https://github.com/RaaSaaR-org/openclaw-swarm/releases/latest/download/install.yaml
+#
+# 2. Set your OpenRouter API key and apply this file:
+#    export OPENROUTER_API_KEY="sk-or-..."
+#    sed "s/REPLACE_WITH_API_KEY/$OPENROUTER_API_KEY/" quickstart.yaml | kubectl apply -f -
+#
+# 3. Wait for the demo agent to start:
+#    kubectl -n emai-swarm get pods -w
+#
+# 4. Port-forward and open the chat:
+#    kubectl -n emai-swarm port-forward svc/kai-demo 18789:18789
+#    # Open http://localhost:18789 (token: demo-token)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: emai-swarm
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: swarm-secrets
+  namespace: emai-swarm
+stringData:
+  openrouter-api-key: "REPLACE_WITH_API_KEY"
+---
+apiVersion: swarm.emai.io/v1alpha1
+kind: KaiInstance
+metadata:
+  name: kai-demo
+  namespace: emai-swarm
+spec:
+  customerName: "Demo"
+  projectName: "Getting Started"
+  gatewayAuth:
+    mode: "token"
+    token: "demo-token"

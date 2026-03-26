@@ -20,43 +20,39 @@ Each customer gets:
 
 ## Quick Start
 
-```bash
-# Prerequisites: Docker, k3d, kubectl, Go 1.22+, Node 22+
+### One-liner (existing K8s cluster)
 
-# Clone
+```bash
+# 1. Install the operator
+kubectl apply -f https://github.com/RaaSaaR-org/openclaw-swarm/releases/latest/download/install.yaml
+
+# 2. Deploy a demo agent (set your OpenRouter API key first)
+export OPENROUTER_API_KEY="sk-or-..."  # free at openrouter.ai
+curl -sL https://raw.githubusercontent.com/RaaSaaR-org/openclaw-swarm/main/quickstart.yaml \
+  | sed "s/REPLACE_WITH_API_KEY/$OPENROUTER_API_KEY/" \
+  | kubectl apply -f -
+
+# 3. Wait and connect
+kubectl -n emai-swarm wait --for=condition=Ready pod -l emai.io/customer=demo --timeout=120s
+kubectl -n emai-swarm port-forward svc/kai-demo 18789:18789
+# Open http://localhost:18789 (token: demo-token)
+```
+
+### Local development
+
+```bash
+# Prerequisites: Go 1.22+, Node 22+, k3d, kubectl
+
 git clone https://github.com/RaaSaaR-org/openclaw-swarm.git
 cd openclaw-swarm
 
-# Set up local K8s cluster
-make dev-cluster
-
-# Install the operator CRD
-make install-crds
-
-# Run the operator locally
-make dev-operator
-# In another terminal:
-
-# Create a customer instance
-cat <<YAML | kubectl apply -f -
-apiVersion: swarm.emai.io/v1alpha1
-kind: KaiInstance
-metadata:
-  name: kai-demo
-  namespace: default
-spec:
-  customerName: "Demo Customer"
-  projectName: "Demo Project"
-  gatewayAuth:
-    mode: "token"
-    token: "demo-token"
-YAML
-
-# Check it's running
-kubectl get kaiinstances
+make dev-cluster      # Create k3d cluster
+make install-crds     # Install KaiInstance CRD
+make dev-operator     # Run operator (terminal 1)
+make dev-chat         # Run chat UI (terminal 2)
 ```
 
-### Docker Compose (alternative, no K8s)
+### Docker Compose (no K8s)
 
 ```bash
 cp docker/.env.example docker/.env
