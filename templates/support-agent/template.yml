@@ -1,0 +1,23 @@
+name: support-agent
+description: "Support agent for customer questions — no MissionControl, lighter resources"
+
+variables:
+  - name: DOMAIN
+    description: "Customer's domain (e.g. Robotik, Fertigung, Logistik)"
+    default: ""
+  - name: LANGUAGE
+    default: "de"
+  - name: TONE
+    default: "Freundlich, hilfsbereit, geduldig"
+
+features:
+  openclaw: true
+  project-management: false
+
+channels:
+  webchat: true
+  telegram: false
+
+resources:
+  requests: { memory: "768Mi", cpu: "100m" }
+  limits: { memory: "1536Mi", cpu: "500m" }

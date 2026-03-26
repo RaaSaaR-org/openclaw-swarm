@@ -1,0 +1,19 @@
+apiVersion: swarm.emai.io/v1alpha1
+kind: KaiInstance
+metadata:
+  name: kai-{{CUSTOMER_SLUG}}
+  namespace: emai-swarm
+spec:
+  customerName: "{{CUSTOMER_NAME}}"
+  projectName: "{{PROJECT_NAME}}"
+  customerSlug: "{{CUSTOMER_SLUG}}"
+  gatewayAuth:
+    mode: "token"
+    token: "{{GATEWAY_TOKEN}}"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "100m"
+    limits:
+      memory: "1536Mi"
+      cpu: "500m"

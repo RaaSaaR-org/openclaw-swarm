@@ -1,0 +1,31 @@
+# {{CUSTOMER_NAME}} — Customer Configuration
+# This file tracks which features and channels are enabled for this customer.
+# Used by deploy.sh, swarm-sync, and operator provisioning.
+
+customer:
+  name: "{{CUSTOMER_NAME}}"
+  slug: "{{CUSTOMER_SLUG}}"
+  hq_id: "{{HQ_ID}}"
+  project: "{{PROJECT_NAME}}"
+  language: "{{LANGUAGE}}"
+  status: "active"
+
+# Features enabled for this customer
+features:
+  openclaw: true              # Base: isolated Kai agent instance
+  project-management: true    # MissionControl (mc) + swarm-sync + dashboard
+
+# Communication channels
+channels:
+  webchat:
+    enabled: true
+    url: "https://kai.emai.dev/chat/{{CUSTOMER_SLUG}}"
+  # telegram:
+  #   enabled: false
+
+# Dashboard access (requires project-management feature)
+dashboard:
+  url: "https://kai.emai.dev/hq/{{CUSTOMER_SLUG}}"
+  auth:
+    user: "{{CUSTOMER_SLUG}}"
+    # password in .env

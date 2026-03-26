@@ -1,0 +1,23 @@
+name: project-assistant
+description: "Project assistant with MissionControl, task management, and status reports"
+
+variables:
+  - name: DOMAIN
+    description: "Customer's domain (e.g. Robotik, Fertigung, Logistik)"
+    default: ""
+  - name: LANGUAGE
+    default: "de"
+  - name: TONE
+    default: "Professionell, direkt, kollegial"
+
+features:
+  openclaw: true
+  project-management: true
+
+channels:
+  webchat: true
+  telegram: false
+
+resources:
+  requests: { memory: "1Gi", cpu: "100m" }
+  limits: { memory: "2Gi", cpu: "500m" }

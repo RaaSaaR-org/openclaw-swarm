@@ -1,0 +1,23 @@
+name: research-assistant
+description: "Research assistant for scientific cooperations — milestone tracking, lab coordination"
+
+variables:
+  - name: DOMAIN
+    description: "Research domain (e.g. Robotik, VLA-Modelle, Fertigungsautomatisierung)"
+    default: ""
+  - name: LANGUAGE
+    default: "de"
+  - name: TONE
+    default: "Wissenschaftlich-professionell, praezise, kollegial"
+
+features:
+  openclaw: true
+  project-management: true
+
+channels:
+  webchat: true
+  telegram: false
+
+resources:
+  requests: { memory: "1Gi", cpu: "100m" }
+  limits: { memory: "2Gi", cpu: "500m" }
