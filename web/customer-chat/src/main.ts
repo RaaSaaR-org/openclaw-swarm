@@ -365,8 +365,27 @@ function showFullError(title: string, detail: string, steps: string[]) {
 
 function renderMarkdown(text: string): string {
   try {
-    return marked.parse(text) as string;
+    let html = marked.parse(text) as string;
+    // Add copy button to code blocks
+    html = html.replace(/<pre><code(.*?)>([\s\S]*?)<\/code><\/pre>/g,
+      (_match, attrs, code) => {
+        return `<div class="code-block"><button class="copy-btn" title="Kopieren">&#x1f4cb;</button><pre><code${attrs}>${code}</code></pre></div>`;
+      });
+    return html;
   } catch {
     return escapeHtml(text);
   }
 }
+
+// Copy button click handler (event delegation)
+document.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.copy-btn');
+  if (!btn) return;
+  const code = btn.parentElement?.querySelector('code');
+  if (code) {
+    navigator.clipboard.writeText(code.textContent || '').then(() => {
+      btn.textContent = '\u2713';
+      setTimeout(() => { btn.textContent = '\u{1f4cb}'; }, 1500);
+    });
+  }
+});
