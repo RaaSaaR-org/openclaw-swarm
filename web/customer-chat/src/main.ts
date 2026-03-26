@@ -28,6 +28,26 @@ let currentStreamEl: HTMLElement | null = null;
 let streamedText = '';
 let hasFatalError = false;
 
+// Message persistence (localStorage)
+interface SavedMessage { role: 'user' | 'agent'; text: string; ts: number; }
+const STORAGE_KEY = `kai-chat-${slug}`;
+const MAX_SAVED = 100;
+
+function saveMessage(role: 'user' | 'agent', text: string) {
+  try {
+    const saved: SavedMessage[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    saved.push({ role, text, ts: Date.now() });
+    if (saved.length > MAX_SAVED) saved.splice(0, saved.length - MAX_SAVED);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+  } catch { /* storage full or unavailable */ }
+}
+
+function loadMessages(): SavedMessage[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
 // Render app shell
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="chat-container">
@@ -161,7 +181,7 @@ if (!token) {
         if (identity.emoji) avatarEl.textContent = identity.emoji;
       }
 
-      // Load history
+      // Load history (server-side first, localStorage fallback)
       const history = await client.loadHistory();
       if (history.length > 0) {
         welcomeEl.style.display = 'none';
@@ -170,6 +190,16 @@ if (!token) {
           appendMessage(role, msg.text, role === 'agent');
         });
         scrollToBottom();
+      } else {
+        // Fallback: restore from localStorage
+        const saved = loadMessages();
+        if (saved.length > 0) {
+          welcomeEl.style.display = 'none';
+          saved.forEach((msg) => {
+            appendMessage(msg.role, msg.text, msg.role === 'agent');
+          });
+          scrollToBottom();
+        }
       }
     },
 
@@ -206,6 +236,7 @@ if (!token) {
       } else {
         appendMessage('agent', finalText, true);
       }
+      saveMessage('agent', finalText);
       isStreaming = false;
       currentStreamEl = null;
       streamedText = '';
@@ -277,6 +308,7 @@ if (!token) {
 
     welcomeEl.style.display = 'none';
     appendMessage('user', text);
+    saveMessage('user', text);
     scrollToBottom();
     inputEl.value = '';
     inputEl.disabled = true;
