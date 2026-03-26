@@ -63,13 +63,24 @@ func renderTemplate(name string, vars templateVars) (string, error) {
 // renderedTemplates holds all rendered template content.
 type renderedTemplates struct {
 	SoulMD       string
+	AgentsMD     string
+	ToolsMD      string
 	HeartbeatMD  string
 	OpenClawJSON string
+	SkillMC      string
 }
 
 // renderAllTemplates renders all agent templates and returns them.
 func renderAllTemplates(vars templateVars) (*renderedTemplates, error) {
 	soul, err := renderTemplate("SOUL.md.tmpl", vars)
+	if err != nil {
+		return nil, err
+	}
+	agents, err := renderTemplate("AGENTS.md.tmpl", vars)
+	if err != nil {
+		return nil, err
+	}
+	tools, err := renderTemplate("TOOLS.md.tmpl", vars)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +92,18 @@ func renderAllTemplates(vars templateVars) (*renderedTemplates, error) {
 	if err != nil {
 		return nil, err
 	}
+	// SKILL-mc.md is a static file (no placeholders), read directly
+	skillMC, err := templateFS.ReadFile("templates/SKILL-mc.md")
+	if err != nil {
+		return nil, fmt.Errorf("reading SKILL-mc.md: %w", err)
+	}
 	return &renderedTemplates{
 		SoulMD:       soul,
+		AgentsMD:     agents,
+		ToolsMD:      tools,
 		HeartbeatMD:  heartbeat,
 		OpenClawJSON: config,
+		SkillMC:      string(skillMC),
 	}, nil
 }
 

@@ -63,8 +63,11 @@ func buildConfigMap(kai *swarmv1alpha1.KaiInstance, slug string, tmpl *renderedT
 		},
 		Data: map[string]string{
 			"SOUL.md":       tmpl.SoulMD,
+			"AGENTS.md":     tmpl.AgentsMD,
+			"TOOLS.md":      tmpl.ToolsMD,
 			"HEARTBEAT.md":  tmpl.HeartbeatMD,
 			"openclaw.json": tmpl.OpenClawJSON,
+			"SKILL-mc.md":   tmpl.SkillMC,
 		},
 	}
 }
@@ -153,7 +156,10 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 
 	// Init container copies ConfigMap files into the PVC so the workspace is writable
 	// (OpenClaw needs to create USER.md, MEMORY.md at runtime)
-	initScript := `mkdir -p /state/workspace && cp /identity/SOUL.md /state/workspace/SOUL.md && cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
+	// Only copy identity files if they don't already exist on the PVC
+	// (preserves custom files from onboard.sh or manual overrides)
+	// Always copy skills and openclaw.json (generic, not customer-specific)
+	initScript := `mkdir -p /state/workspace /state/workspace/skills/mc /state/workspace/memory && [ -f /state/workspace/SOUL.md ] || cp /identity/SOUL.md /state/workspace/SOUL.md && [ -f /state/workspace/AGENTS.md ] || cp /identity/AGENTS.md /state/workspace/AGENTS.md && [ -f /state/workspace/TOOLS.md ] || cp /identity/TOOLS.md /state/workspace/TOOLS.md && [ -f /state/workspace/HEARTBEAT.md ] || cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md && cp /identity/SKILL-mc.md /state/workspace/skills/mc/SKILL.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

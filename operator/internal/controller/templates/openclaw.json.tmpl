@@ -2,7 +2,8 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "${OPENCLAW_MODEL}"
+        "primary": "${OPENCLAW_MODEL}",
+        "fallback": "openrouter/google/gemini-2.0-flash-exp:free"
       },
       "workspace": "/home/node/.openclaw/workspace",
       "skipBootstrap": true,
