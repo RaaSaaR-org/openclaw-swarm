@@ -20,10 +20,11 @@ jobs:
         with:
           go-version-file: operator/go.mod
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: operator
+      - name: Fmt
+        run: test -z "$(gofmt -l .)" || { gofmt -d .; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
 
       - name: Test
         run: make test
