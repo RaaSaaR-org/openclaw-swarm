@@ -14,7 +14,3 @@ spec:
       port: 18789
       targetPort: gateway
       protocol: TCP
-    - name: dashboard
-      port: 5001
-      targetPort: dashboard
-      protocol: TCP

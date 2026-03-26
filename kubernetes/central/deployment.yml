@@ -40,15 +40,7 @@ spec:
               # Install kubectl + swarm-ctl into shared bin volume
               cp /opt/bitnami/kubectl/bin/kubectl /shared-bin/kubectl
               cp /scripts/swarm-ctl /shared-bin/swarm-ctl
-              chmod +x /shared-bin/kubectl /shared-bin/swarm-ctl /shared-bin/mc 2>/dev/null || true
-              # Set up SSH for git (HQ deploy key)
-              mkdir -p /state/.ssh
-              if [ -f /deploy-key/ssh-privatekey ]; then
-                cp /deploy-key/ssh-privatekey /state/.ssh/id_ed25519
-                chmod 600 /state/.ssh/id_ed25519
-                printf 'Host github.com\n  IdentityFile /home/node/.openclaw/.ssh/id_ed25519\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /state/.ssh/config
-                chmod 644 /state/.ssh/config
-              fi
+              chmod +x /shared-bin/kubectl /shared-bin/swarm-ctl
               chown -R 1000:1000 /state
           volumeMounts:
             - name: state
@@ -59,9 +51,6 @@ spec:
               mountPath: /shared-bin
             - name: swarm-ctl-script
               mountPath: /scripts
-            - name: deploy-key
-              mountPath: /deploy-key
-              readOnly: true
       containers:
         - name: openclaw
           image: ghcr.io/openclaw/openclaw:latest
@@ -94,16 +83,6 @@ spec:
               value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/shared-bin"
             - name: SWARM_NAMESPACE
               value: "emai-swarm"
-            - name: GIT_SSH_COMMAND
-              value: "ssh -i /home/node/.openclaw/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
-            - name: GIT_AUTHOR_NAME
-              value: "emai-swarm-kira"
-            - name: GIT_AUTHOR_EMAIL
-              value: "kira@emai.dev"
-            - name: GIT_COMMITTER_NAME
-              value: "emai-swarm-kira"
-            - name: GIT_COMMITTER_EMAIL
-              value: "kira@emai.dev"
           volumeMounts:
             - name: state
               mountPath: /home/node/.openclaw
@@ -132,100 +111,6 @@ spec:
             limits:
               memory: "2Gi"
               cpu: "500m"
-        - name: mc-dashboard
-          image: ghcr.io/openclaw/openclaw:latest
-          command: ["sh", "-c"]
-          args:
-            - |
-              HQ=/home/node/.openclaw/workspace/headquarter
-              MC=/shared-bin/mc
-              # Wait for mc binary and HQ repo
-              until [ -f $MC ] && [ -f $HQ/config/config.yml ]; do
-                echo "Waiting for mc binary and HQ repo..."
-                sleep 5
-              done
-              # Start HQ main dashboard
-              echo "Starting HQ main dashboard on port 5000..."
-              cd $HQ && $MC serve --port 5000 --base-path /hq/main &
-              # Start per-customer dashboards (only enabled customers)
-              ENABLED_CUSTOMERS="zema east-side-fab-e-v"
-              PORT=5010
-              for CUST_DIR in $HQ/customers/CUST-*/; do
-                if [ -f "$CUST_DIR/config/config.yml" ]; then
-                  SLUG=$(basename "$CUST_DIR" | sed 's/CUST-[0-9]*-//')
-                  echo "$ENABLED_CUSTOMERS" | grep -qw "$SLUG" || continue
-                  echo "Starting $SLUG dashboard on port $PORT..."
-                  cd "$CUST_DIR" && $MC serve --port $PORT --base-path "/hq/$SLUG" &
-                  PORT=$((PORT + 1))
-                fi
-              done
-              # Proxy: route /hq/* to the right mc serve instance
-              sleep 2
-              node -e "
-                const http = require('http');
-                const net = require('net');
-                const fs = require('fs');
-                // Build route map: /hq/main -> 5000, /hq/<slug> -> 5010+
-                const routes = {'/hq/main': 5000};
-                const enabled = '$ENABLED_CUSTOMERS'.split(' ');
-                let port = 5010;
-                const hq = '$HQ';
-                fs.readdirSync(hq + '/customers').filter(d => d.startsWith('CUST-')).forEach(d => {
-                  const cfg = hq + '/customers/' + d + '/config/config.yml';
-                  const slug = d.replace(/CUST-\d+-/, '');
-                  if (fs.existsSync(cfg) && enabled.includes(slug)) {
-                    routes['/hq/' + slug] = port++;
-                  }
-                });
-                console.log('Dashboard routes:', routes);
-                // Landing page
-                const landing = Object.keys(routes).map(r =>
-                  '<li><a href=\"' + r + '\">' + r.replace('/hq/', '') + '</a></li>'
-                ).join('');
-                const landingHtml = '<!DOCTYPE html><html><head><title>EmAI Dashboards</title><style>body{font-family:system-ui;max-width:600px;margin:60px auto;padding:0 20px}h1{font-size:1.5em}ul{list-style:none;padding:0}li{margin:8px 0}a{color:#0d47a1;text-decoration:none;font-size:1.1em}a:hover{text-decoration:underline}</style></head><body><h1>EmAI Dashboards</h1><ul>' + landing + '</ul><p style=\"color:#888;margin-top:40px\">Powered by MissionControl</p></body></html>';
-                // HTTP proxy
-                http.createServer((req, res) => {
-                  if (req.url === '/hq' || req.url === '/hq/') {
-                    res.writeHead(200, {'Content-Type': 'text/html'});
-                    res.end(landingHtml);
-                    return;
-                  }
-                  // Find matching route
-                  const match = Object.keys(routes).sort((a,b) => b.length - a.length).find(r => req.url.startsWith(r));
-                  if (!match) { res.writeHead(404); res.end('Not found'); return; }
-                  // Proxy to mc serve
-                  const opts = {hostname:'127.0.0.1', port:routes[match], path:req.url, method:req.method, headers:req.headers};
-                  const proxy = http.request(opts, pRes => {
-                    res.writeHead(pRes.statusCode, pRes.headers);
-                    pRes.pipe(res);
-                  });
-                  proxy.on('error', () => { res.writeHead(502); res.end('Dashboard unavailable'); });
-                  req.pipe(proxy);
-                }).listen(5001, '0.0.0.0', () => console.log('Dashboard proxy on 0.0.0.0:5001'));
-              "
-          ports:
-            - containerPort: 5001
-              name: dashboard
-          volumeMounts:
-            - name: state
-              mountPath: /home/node/.openclaw
-              readOnly: true
-            - name: shared-bin
-              mountPath: /shared-bin
-              readOnly: true
-          livenessProbe:
-            httpGet:
-              path: /hq/
-              port: 5001
-            initialDelaySeconds: 60
-            periodSeconds: 30
-          resources:
-            requests:
-              memory: "32Mi"
-              cpu: "10m"
-            limits:
-              memory: "128Mi"
-              cpu: "100m"
       volumes:
         - name: state
           persistentVolumeClaim:
@@ -239,8 +124,3 @@ spec:
             defaultMode: 0755
         - name: shared-bin
           emptyDir: {}
-        - name: deploy-key
-          secret:
-            secretName: hq-deploy-key
-            defaultMode: 0400
-            optional: true
