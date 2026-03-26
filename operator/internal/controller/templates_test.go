@@ -123,10 +123,10 @@ func TestRenderAllTemplates(t *testing.T) {
 
 	// No unresolved placeholders in any template
 	for name, content := range map[string]string{
-		"SoulMD":   tmpl.SoulMD,
-		"AgentsMD": tmpl.AgentsMD,
-		"ToolsMD":  tmpl.ToolsMD,
-		"HeartbeatMD": tmpl.HeartbeatMD,
+		"SoulMD":       tmpl.SoulMD,
+		"AgentsMD":     tmpl.AgentsMD,
+		"ToolsMD":      tmpl.ToolsMD,
+		"HeartbeatMD":  tmpl.HeartbeatMD,
 		"OpenClawJSON": tmpl.OpenClawJSON,
 	} {
 		if strings.Contains(content, "{{CUSTOMER_NAME}}") ||
