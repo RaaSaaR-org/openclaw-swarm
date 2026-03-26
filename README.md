@@ -5,26 +5,10 @@ Multi-instance deployment platform for [OpenClaw](https://docs.openclaw.ai) AI a
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph Platform
-        OP[Swarm Operator]
-        CC[Chat UI]
-        CA[Central Agent]
-    end
-
-    subgraph "Customer Instances (isolated)"
-        K1[Kai — Customer A]
-        K2[Kai — Customer B]
-        K3[Kai — Customer C]
-    end
-
-    OP -->|reconcile| K1
-    OP -->|reconcile| K2
-    OP -->|reconcile| K3
-    CC -->|WebSocket| K1
-    CC -->|WebSocket| K2
-    CC -->|WebSocket| K3
-    CA -->|orchestrate| OP
+graph LR
+    OP[Operator] -->|KaiInstance CRD| K[Kai Pods]
+    Chat[Chat UI] -->|WebSocket| K
+    K -->|isolated| K
 ```
 
 Each customer gets:
