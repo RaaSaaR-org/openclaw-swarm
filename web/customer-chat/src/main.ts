@@ -61,11 +61,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
       </div>
       <div class="header-right">
-        <button class="info-btn" id="info-btn" title="Info & Hilfe">?</button>
+        <button class="info-btn" id="info-btn" title="Info & Hilfe" aria-label="Info und Hilfe anzeigen">?</button>
         <span class="brand">EmAI</span>
       </div>
     </header>
-    <main class="messages" id="messages">
+    <main class="messages" id="messages" aria-live="polite">
       <div class="welcome" id="welcome">
         <div class="welcome-emoji">🤖</div>
         <h2>Willkommen!</h2>
@@ -75,7 +75,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <footer class="input-area">
       <form id="chat-form">
         <input type="text" id="input" placeholder="Nachricht schreiben..." autocomplete="off" disabled />
-        <button type="submit" id="send-btn" disabled>
+        <button type="submit" id="send-btn" disabled aria-label="Nachricht senden">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </form>
@@ -85,7 +85,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </div>
   </div>
   <div class="modal-overlay" id="info-modal">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Info und Hilfe">
       <div class="modal-header">
         <h2>Kai — Projekt-Assistent</h2>
         <button class="modal-close" id="modal-close">&times;</button>
@@ -139,6 +139,27 @@ document.getElementById('modal-close')!.addEventListener('click', () => {
 infoModal.addEventListener('click', (e) => {
   if (e.target === infoModal) infoModal.classList.remove('open');
 });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && infoModal.classList.contains('open')) {
+    infoModal.classList.remove('open');
+  }
+});
+
+// Typing indicator
+function showTyping() {
+  let el = document.getElementById('typing-indicator');
+  if (el) return;
+  el = document.createElement('div');
+  el.id = 'typing-indicator';
+  el.className = 'message agent typing';
+  el.innerHTML = '<div class="message-bubble"><div class="message-sender">Kai</div><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+  messagesEl.appendChild(el);
+  scrollToBottom();
+}
+
+function hideTyping() {
+  document.getElementById('typing-indicator')?.remove();
+}
 
 // Token check
 if (!token) {
@@ -170,7 +191,7 @@ if (!token) {
   const client = new GatewayClient(wsHost, token, {
     onConnected: async (identity: AgentIdentity | null) => {
       statusEl.textContent = 'Online';
-      statusEl.classList.remove('error');
+      statusEl.classList.remove('error', 'connecting');
       statusEl.classList.add('online');
       inputEl.disabled = false;
       sendBtn.disabled = false;
@@ -216,6 +237,7 @@ if (!token) {
       if (!isStreaming) {
         isStreaming = true;
         streamedText = '';
+        hideTyping();
         currentStreamEl = appendMessage('agent', '');
         currentStreamEl.classList.add('streaming');
       }
@@ -247,6 +269,7 @@ if (!token) {
     },
 
     onChatError: (error: string) => {
+      hideTyping();
       if (currentStreamEl) {
         currentStreamEl.querySelector('.message-text')!.textContent = `Fehler: ${error}`;
         currentStreamEl.classList.remove('streaming');
@@ -315,9 +338,11 @@ if (!token) {
     sendBtn.disabled = true;
 
     client.sendMessage(text);
+    showTyping();
   });
 
   // Connect
+  statusEl.classList.add('connecting');
   client.connect();
 }
 
@@ -369,7 +394,7 @@ function renderMarkdown(text: string): string {
     // Add copy button to code blocks
     html = html.replace(/<pre><code(.*?)>([\s\S]*?)<\/code><\/pre>/g,
       (_match, attrs, code) => {
-        return `<div class="code-block"><button class="copy-btn" title="Kopieren">&#x1f4cb;</button><pre><code${attrs}>${code}</code></pre></div>`;
+        return `<div class="code-block"><button class="copy-btn" title="Kopieren" aria-label="Code kopieren">&#x1f4cb;</button><pre><code${attrs}>${code}</code></pre></div>`;
       });
     return html;
   } catch {
