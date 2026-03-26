@@ -29,7 +29,7 @@ jobs:
         run: make test
 
       - name: Build
-        run: go build -o /dev/null ./cmd/main.go
+        run: go build -ldflags "-X main.Version=ci-${{ github.sha }}" -o /dev/null ./cmd/main.go
 
   chat:
     name: Chat UI (TypeScript)
@@ -55,10 +55,62 @@ jobs:
       - name: Build
         run: npm run build
 
+  templates:
+    name: Template Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate openclaw.json template
+        run: |
+          # Render template with test values and validate JSON
+          sed 's/{{CUSTOMER_NAME}}/Test/g; s/{{CUSTOMER_SLUG}}/test/g; s/{{PROJECT_NAME}}/Test/g; s/${OPENCLAW_MODEL}/test-model/g' \
+            operator/internal/controller/templates/openclaw.json.tmpl | python3 -c "
+          import sys, json
+          cfg = json.load(sys.stdin)
+          assert cfg['tools']['profile'] == 'coding', f'tools.profile should be coding, got {cfg[\"tools\"][\"profile\"]}'
+          assert cfg['agents']['defaults']['workspace'] == '/home/node/.openclaw/workspace', 'wrong workspace path'
+          print('openclaw.json template OK')
+          "
+
+      - name: Check mc -y flag consistency
+        run: |
+          # All mc commands in agent/template files should use -y
+          FILES=$(find operator/internal/controller/templates agents -name '*.md' -o -name '*.tmpl' | grep -v node_modules)
+          ERRORS=0
+          for f in $FILES; do
+            while IFS= read -r line; do
+              trimmed=$(echo "$line" | sed 's/^[[:space:]]*//')
+              if echo "$trimmed" | grep -qE '^\./mc [^-]|^mc [^-]' && ! echo "$trimmed" | grep -qE '^\./mc -y|^mc -y|^#|binary'; then
+                echo "FAIL: $f: missing -y flag: $trimmed"
+                ERRORS=$((ERRORS + 1))
+              fi
+            done < "$f"
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "$ERRORS mc commands missing -y flag"
+            exit 1
+          fi
+          echo "All mc commands use -y flag"
+
+      - name: Check no stale references
+        run: |
+          # No customer-workspace, mc get_status, or messaging profile in templates
+          FILES=$(find operator/internal/controller/templates agents -name '*.md' -o -name '*.tmpl' -o -name '*.json' | grep -v node_modules)
+          ERRORS=0
+          for pattern in "customer-workspace" "mc get_status" '"messaging"'; do
+            if grep -rl "$pattern" $FILES 2>/dev/null; then
+              echo "FAIL: found stale reference: $pattern"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then exit 1; fi
+          echo "No stale references found"
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [operator, chat]
+    needs: [operator, chat, templates]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4

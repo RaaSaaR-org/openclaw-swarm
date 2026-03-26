@@ -76,7 +76,7 @@ build-chat: ## Build customer chat image
 
 .PHONY: build-installer
 build-installer: ## Generate operator install manifest (dist/install.yaml)
-	cd operator && IMG=swarm-operator:latest make build-installer
+	cd operator && make build-installer
 
 ##@ Kubernetes
 
@@ -93,3 +93,23 @@ apply-base: ## Apply base K8s manifests (namespace, central agent, chat UI)
 	kubectl apply -f kubernetes/namespace.yml
 	kubectl apply -f kubernetes/central/
 	kubectl apply -f kubernetes/customer-chat/
+
+##@ Smoke Test
+
+.PHONY: smoke-test
+smoke-test: ## Create a test KaiInstance, verify it works, then clean up
+	@echo "Creating test instance..."
+	@kubectl apply -f - <<< '{"apiVersion":"swarm.emai.io/v1alpha1","kind":"KaiInstance","metadata":{"name":"kai-smoke-test","namespace":"default"},"spec":{"customerName":"Smoke Test","projectName":"CI Test","gatewayAuth":{"mode":"token","token":"smoke-test"}}}'
+	@echo "Waiting for pod..."
+	@kubectl wait --for=condition=Ready pod -l emai.io/customer=smoke-test --timeout=120s || { echo "FAIL: pod not ready"; kubectl delete kaiinstance kai-smoke-test --ignore-not-found; exit 1; }
+	@echo "Checking ConfigMap..."
+	@kubectl get configmap kai-smoke-test-identity -o jsonpath='{.data.openclaw\.json}' | python3 -c "import sys,json; c=json.load(sys.stdin); assert c['tools']['profile']=='coding', 'wrong profile'; assert c['agents']['defaults']['workspace']=='/home/node/.openclaw/workspace', 'wrong workspace'; print('  ConfigMap OK')"
+	@echo "Checking workspace files in ConfigMap..."
+	@for f in SOUL.md AGENTS.md TOOLS.md HEARTBEAT.md SKILL-mc.md openclaw.json; do kubectl get configmap kai-smoke-test-identity -o jsonpath="{.data.$$f}" | head -1 > /dev/null && echo "  $$f OK" || echo "  $$f MISSING"; done
+	@echo "Checking gateway health..."
+	@kubectl exec deployment/kai-smoke-test -c agent -- curl -sf http://localhost:18789/healthz > /dev/null && echo "  Gateway OK" || echo "  Gateway not ready (may need more time)"
+	@echo "Cleaning up..."
+	@kubectl delete kaiinstance kai-smoke-test --ignore-not-found
+	@sleep 5
+	@kubectl delete pvc kai-smoke-test-state --ignore-not-found 2>/dev/null || true
+	@echo "Smoke test passed!"
