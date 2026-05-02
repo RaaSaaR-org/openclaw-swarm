@@ -56,6 +56,58 @@ jobs:
       - name: Build
         run: npm run build
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: web/customer-chat/server/go.mod
+
+      - name: Server vet
+        working-directory: web/customer-chat/server
+        run: go vet ./...
+
+      - name: Server build
+        working-directory: web/customer-chat/server
+        run: |
+          mkdir -p web && touch web/.gitkeep
+          go build -o /dev/null .
+
+  center:
+    name: Customer Center (TypeScript + Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/customer-center
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/customer-center/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build SPA
+        run: npm run build
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: web/customer-center/server/go.mod
+
+      - name: Server vet
+        working-directory: web/customer-center/server
+        run: go vet ./...
+
+      - name: Server build
+        working-directory: web/customer-center/server
+        run: |
+          mkdir -p web && touch web/.gitkeep
+          go build -o /dev/null .
+
   templates:
     name: Template Validation
     runs-on: ubuntu-latest
@@ -111,7 +163,7 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [operator, chat, templates]
+    needs: [operator, chat, center, templates]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -121,3 +173,6 @@ jobs:
 
       - name: Build chat image
         run: docker build -t emai-customer-chat:ci web/customer-chat/
+
+      - name: Build center image
+        run: docker build -t emai-customer-center:ci web/customer-center/

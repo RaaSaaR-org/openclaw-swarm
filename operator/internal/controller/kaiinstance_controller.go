@@ -47,6 +47,7 @@ type KaiInstanceReconciler struct {
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=configmaps;services;persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +110,12 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// 6. Reconcile child resources
 	if err := r.reconcileConfigMap(ctx, &kai, slug, tmpl); err != nil {
 		return ctrl.Result{}, r.setFailed(ctx, &kai, "ConfigMapError", err)
+	}
+	if err := r.reconcileUsersSecret(ctx, &kai, slug); err != nil {
+		return ctrl.Result{}, r.setFailed(ctx, &kai, "UsersSecretError", err)
+	}
+	if err := r.reconcileChatBridgeSecret(ctx, &kai, slug); err != nil {
+		return ctrl.Result{}, r.setFailed(ctx, &kai, "ChatBridgeSecretError", err)
 	}
 	if err := r.reconcilePVC(ctx, &kai, slug); err != nil {
 		return ctrl.Result{}, r.setFailed(ctx, &kai, "PVCError", err)
@@ -371,6 +378,7 @@ func (r *KaiInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&swarmv1alpha1.KaiInstance{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.NetworkPolicy{}).
 		Owns(&networkingv1.Ingress{}).

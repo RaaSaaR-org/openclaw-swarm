@@ -1,0 +1,25 @@
+# status-page only needs to read individual KaiInstances to validate
+# the customer's gateway token and report the public-facing phase.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: status-page
+  namespace: emai-swarm
+rules:
+  - apiGroups: ["swarm.emai.io"]
+    resources: ["kaiinstances"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: status-page
+  namespace: emai-swarm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: status-page
+subjects:
+  - kind: ServiceAccount
+    name: status-page
+    namespace: emai-swarm

@@ -35,15 +35,16 @@
 ## Initial Setup
 
 - [ ] Access the customer agent via one of:
-  - **Web Chat:** `http://<host>:3000/chat/<slug>?token=<gateway-token>&host=ws://<host>:<port>`
-  - **Control UI:** `http://<host>:<port>` (admin access, requires pairing)
+  - **Customer Center:** `https://<host>/center/<slug>` — sign in with email + password (first visit creates the admin account).
+  - **Web Chat:** `https://<host>/chat/<slug>` — same sign-in. Backed by the per-customer `kai-<slug>-users` Secret.
   - **Telegram:** Via dedicated bot (if configured)
 - [ ] Send test message to verify agent responds correctly
 - [ ] Verify isolation: ask about other customers — agent should refuse
 
 ## Handoff to Customer
 
-- [ ] Share Web Chat link: `http://<host>:3000/chat/<slug>?token=<token>&host=ws://<host>:<port>`
+- [ ] Share the Customer Center link: `https://<host>/center/<slug>` — first visit creates the customer admin account.
+- [ ] Walk the customer through adding their team in the Team Access panel; they share initial passwords with each user out-of-band.
 - [ ] Optionally share Telegram bot link
 - [ ] Brief walkthrough: what the agent can do (project tracking, tasks, meetings, status reports)
 - [ ] Set expectations: agent scope, available tools, escalation path

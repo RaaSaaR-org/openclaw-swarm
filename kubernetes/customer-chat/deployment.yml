@@ -17,29 +17,42 @@ spec:
         app: customer-chat
         component: web
     spec:
+      serviceAccountName: customer-chat
       containers:
-        - name: chat-ui
-          image: emai-customer-chat:latest
-          imagePullPolicy: Never
+        - name: customer-chat
+          image: ghcr.io/raasaar-org/openclaw-swarm/customer-chat:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - containerPort: 8080
               name: http
+          env:
+            - name: ADDR
+              value: ":8080"
+            - name: SWARM_NAMESPACE
+              value: "emai-swarm"
           resources:
+            # argon2id (64 MiB working set per concurrent login) needs headroom.
             requests:
-              memory: "32Mi"
-              cpu: "10m"
+              memory: "96Mi"
+              cpu: "50m"
             limits:
-              memory: "64Mi"
-              cpu: "100m"
+              memory: "256Mi"
+              cpu: "500m"
           livenessProbe:
             httpGet:
-              path: /
-              port: 3000
+              path: /healthz
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /
-              port: 3000
+              path: /healthz
+              port: 8080
             initialDelaySeconds: 2
             periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]

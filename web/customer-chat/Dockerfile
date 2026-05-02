@@ -1,11 +1,21 @@
-FROM node:22-alpine AS build
-WORKDIR /app
+FROM node:22-alpine AS web-build
+WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY . .
+COPY tsconfig.json vite.config.ts index.html ./
+COPY src ./src
 RUN npm run build
 
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 3000
+FROM golang:1.25-alpine AS go-build
+WORKDIR /src
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server/*.go ./
+COPY --from=web-build /web/dist ./web
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /customer-chat .
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=go-build /customer-chat /customer-chat
+EXPOSE 8080
+USER nonroot:nonroot
+ENTRYPOINT ["/customer-chat"]

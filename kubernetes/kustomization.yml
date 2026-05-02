@@ -11,6 +11,11 @@ resources:
   - central/serviceaccount.yml
   - central/rbac.yml
   - customer/networkpolicy.yml
+  - admin-console
+  - onboarding
+  - status-page
+  - customer-center
+  - customer-chat
 
 commonLabels:
   app.kubernetes.io/part-of: emai-swarm

@@ -255,7 +255,8 @@ The customer-facing web chat is at `web/customer-chat/`:
 cd web/customer-chat && npm install && npm run dev
 
 # Access:
-# http://localhost:3000/chat/<slug>?token=<gateway-token>&host=ws://localhost:<port>
+# http://localhost:3000/chat/<slug>
+# Sign in with the email + password configured in the customer's Team Access panel.
 ```
 
 For production, build and deploy as a Docker container:

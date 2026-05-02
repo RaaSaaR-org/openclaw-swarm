@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+server/web/*
+!server/web/.gitkeep
+server/swarm-customer-chat
+server/customer-chat
 
 # Editor directories and files
 .vscode/*
