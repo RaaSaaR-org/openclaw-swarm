@@ -9,5 +9,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // Unique assetsDir so /assets/<hash>.js doesn't collide with customer-chat
+    // when both apps share the kai.emai.dev host.
+    assetsDir: 'center-assets',
   },
 });
