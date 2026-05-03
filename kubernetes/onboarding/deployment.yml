@@ -20,7 +20,7 @@ spec:
       serviceAccountName: onboarding
       containers:
         - name: onboarding
-          image: emai-onboarding:latest
+          image: ghcr.io/raasaar-org/openclaw-swarm/onboarding:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

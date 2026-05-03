@@ -20,7 +20,7 @@ spec:
       serviceAccountName: status-page
       containers:
         - name: status-page
-          image: emai-status-page:latest
+          image: ghcr.io/raasaar-org/openclaw-swarm/status-page:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

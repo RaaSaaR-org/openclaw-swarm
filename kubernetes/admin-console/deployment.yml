@@ -20,7 +20,7 @@ spec:
       serviceAccountName: admin-console
       containers:
         - name: admin-console
-          image: emai-admin-console:latest
+          image: ghcr.io/raasaar-org/openclaw-swarm/admin-console:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

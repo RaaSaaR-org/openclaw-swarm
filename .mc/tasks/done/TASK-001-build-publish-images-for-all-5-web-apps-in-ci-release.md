@@ -4,7 +4,7 @@ aliases:
 - TASK-001
 title: Build & publish images for all 5 web apps in CI/release
 slug: build-publish-images-for-all-5-web-apps-in-ci-release
-status: backlog
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Build & publish images for all 5 web apps in CI/release
