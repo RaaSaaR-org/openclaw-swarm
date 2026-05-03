@@ -158,11 +158,26 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 	automount := false
 
 	// Init container copies ConfigMap files into the PVC so the workspace is writable
-	// (OpenClaw needs to create USER.md, MEMORY.md at runtime)
-	// Only copy identity files if they don't already exist on the PVC
-	// (preserves custom files from onboard.sh or manual overrides)
-	// Always copy skills and openclaw.json (generic, not customer-specific)
-	initScript := `mkdir -p /state/workspace /state/workspace/skills/mc /state/workspace/memory && [ -f /state/workspace/SOUL.md ] || cp /identity/SOUL.md /state/workspace/SOUL.md && [ -f /state/workspace/AGENTS.md ] || cp /identity/AGENTS.md /state/workspace/AGENTS.md && [ -f /state/workspace/TOOLS.md ] || cp /identity/TOOLS.md /state/workspace/TOOLS.md && [ -f /state/workspace/HEARTBEAT.md ] || cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md && cp /identity/SKILL-mc.md /state/workspace/skills/mc/SKILL.md && cp /identity/openclaw.json /state/openclaw.json && chown -R 1000:1000 /state`
+	// (OpenClaw needs to create USER.md, MEMORY.md at runtime).
+	// Identity files are copied only on first boot (preserves custom edits from
+	// onboard.sh or manual overrides). The skill bundle is generic and refreshed
+	// every boot. openclaw.json is gated on EXPECTED_HASH: copying it on every
+	// restart was clobbering OpenClaw's schema-migrated state and producing a
+	// trail of `openclaw.json.clobbered.<timestamp>` files in the PVC.
+	initScript := `set -e
+mkdir -p /state/workspace /state/workspace/skills/mc /state/workspace/memory
+[ -f /state/workspace/SOUL.md ] || cp /identity/SOUL.md /state/workspace/SOUL.md
+[ -f /state/workspace/AGENTS.md ] || cp /identity/AGENTS.md /state/workspace/AGENTS.md
+[ -f /state/workspace/TOOLS.md ] || cp /identity/TOOLS.md /state/workspace/TOOLS.md
+[ -f /state/workspace/HEARTBEAT.md ] || cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md
+cp /identity/SKILL-mc.md /state/workspace/skills/mc/SKILL.md
+applied=""
+[ -f /state/.config-hash ] && applied=$(cat /state/.config-hash)
+if [ "$applied" != "$EXPECTED_HASH" ] || [ ! -f /state/openclaw.json ]; then
+  cp /identity/openclaw.json /state/openclaw.json
+  printf %s "$EXPECTED_HASH" > /state/.config-hash
+fi
+chown -R 1000:1000 /state`
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -191,6 +206,9 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 							Name:    "copy-identity",
 							Image:   "busybox:latest",
 							Command: []string{"sh", "-c", initScript},
+							Env: []corev1.EnvVar{
+								{Name: "EXPECTED_HASH", Value: hash},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "state", MountPath: "/state"},
 								{Name: "identity-files", MountPath: "/identity"},
