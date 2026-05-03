@@ -4,7 +4,7 @@ aliases:
 - TASK-002
 title: Remove DEMO_MODE hardcoded JWT secret from customer-chat
 slug: remove-demo-mode-hardcoded-jwt-secret-from-customer-chat
-status: backlog
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Remove DEMO_MODE hardcoded JWT secret from customer-chat

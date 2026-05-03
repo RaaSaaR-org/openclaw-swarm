@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -22,11 +25,12 @@ var webFS embed.FS
 var slugRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 type server struct {
-	dyn       dynamic.Interface
-	core      kubernetes.Interface
-	namespace string
-	demoMode  bool
-	bridges   *bridgePool
+	dyn          dynamic.Interface
+	core         kubernetes.Interface
+	namespace    string
+	demoMode     bool
+	devJWTSecret []byte // ephemeral random secret, only set when demoMode is true; never persisted
+	bridges      *bridgePool
 }
 
 func main() {
@@ -35,11 +39,23 @@ func main() {
 
 	s := &server{
 		namespace: namespace,
-		demoMode:  os.Getenv("DEMO_MODE") == "1" || os.Getenv("DEMO_MODE") == "true",
+		demoMode:  envTrue("KAI_INSECURE_DEV_AUTH"),
 	}
 
 	if s.demoMode {
-		log.Printf("DEMO_MODE enabled — login accepts any user, no upstream gateway")
+		if err := requireLoopback(addr); err != nil {
+			log.Fatalf("%v", err)
+		}
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			log.Fatalf("KAI_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
+		}
+		s.devJWTSecret = secret
+		log.Printf("============================================================")
+		log.Printf("KAI_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
+		log.Printf("Login accepts any user; JWT signed with random ephemeral secret.")
+		log.Printf("Listening on loopback %s only.", addr)
+		log.Printf("============================================================")
 	}
 
 	if cfg, err := loadKubeConfig(); err != nil {
@@ -97,6 +113,31 @@ func envDefault(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func envTrue(k string) bool {
+	v := os.Getenv(k)
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
+// requireLoopback refuses to start when an "insecure dev auth" mode binds to
+// anything reachable off-host. Empty host (e.g. ":8080") binds all interfaces
+// and is rejected — the dev must opt in to a loopback address explicitly.
+func requireLoopback(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires loopback ADDR (e.g. 127.0.0.1:8080), got %q: %v", addr, err)
+	}
+	if host == "" {
+		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires explicit loopback host (e.g. 127.0.0.1:8080), got %q", addr)
+	}
+	if host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("KAI_INSECURE_DEV_AUTH refuses non-loopback host %q — bind to 127.0.0.1, ::1, or localhost", host)
 }
 
 type spaHandler struct{ root fs.FS }

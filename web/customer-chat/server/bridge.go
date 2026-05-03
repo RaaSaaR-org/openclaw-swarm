@@ -589,7 +589,7 @@ func sendJSON(ctx context.Context, ws *websocket.Conn, v any) error {
 }
 
 // runDemoLoop fakes a Kai conversation locally — no upstream needed. Used when
-// DEMO_MODE=1 so the UI can be tested without K8s.
+// KAI_INSECURE_DEV_AUTH=1 so the UI can be tested without K8s.
 func (s *server) runDemoLoop(ctx context.Context, ws *websocket.Conn, email string) {
 	if err := sendJSON(ctx, ws, map[string]any{"type": "ready", "email": email}); err != nil {
 		return

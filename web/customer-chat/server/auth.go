@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -55,7 +56,8 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.demoMode {
-		if err := s.issueSession(w, slug, email, []byte("demo-secret-do-not-use-in-prod")); err != nil {
+		log.Printf("WARN [insecure-dev-auth] login bypass slug=%s email=%s remote=%s", slug, email, r.RemoteAddr)
+		if err := s.issueSession(w, slug, email, s.devJWTSecret); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "session"})
 			return
 		}
@@ -155,7 +157,7 @@ func (s *server) authedClaims(r *http.Request, slug string) (*sessionClaims, boo
 
 	var secret []byte
 	if s.demoMode {
-		secret = []byte("demo-secret-do-not-use-in-prod")
+		secret = s.devJWTSecret
 	} else {
 		var err error
 		secret, err = s.readJWTSecret(r.Context(), slug)
