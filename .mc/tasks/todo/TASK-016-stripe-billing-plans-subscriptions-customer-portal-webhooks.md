@@ -4,7 +4,7 @@ aliases:
 - TASK-016
 title: 'Stripe billing: plans, subscriptions, customer portal, webhooks'
 slug: stripe-billing-plans-subscriptions-customer-portal-webhooks
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # Stripe billing: plans, subscriptions, customer portal, webhooks
@@ -53,12 +54,24 @@ A SaaS product without a payment loop is a free service with revenue plans. To c
 - Invoice the user's email or expose downloadable invoices in customer-center?
 - One subscription per user, or per workspace? Subscription per user is simpler.
 
+## Status
+
+**Phase 0 (`pkg/stripe` SDK wrapper) — done** on 2026-05-03. New sibling Go module `pkg/stripe/` wraps `stripe-go/v82` with the four call sites our SaaS actually uses: `CreateCheckoutSession` (pricing-page CTA), `GetSubscription` (post-checkout success page + webhook handlers), `CancelSubscription` (GDPR cascade — TASK-021 Phase 3), and `ParseWebhook` (signature verification via `webhook.ConstructEventWithOptions`). `TierForPriceID(price)` looks up the configured Tier mapping with safe fallback to `TierFree` for unknown price IDs.
+
+Unit tests cover validation, tier mapping, and signature-mismatch rejection (constructing a real Stripe-style header with HMAC-SHA256 + replay timestamp). Integration tests guarded by `STRIPE_SECRET` env var (refuses to run with anything other than `sk_test_` keys) — verified end-to-end against test account `acct_1TT6fJ2WhHEa6he7`: bad-price-ID surfaces `resource_missing` 400; bad-subscription-ID surfaces `resource_missing` 404. SDK chosen over hand-rolled net/http because Stripe is many endpoints with subtle webhook signature rules; pkg/openrouter/email roll their own because each is one or two calls.
+
+**Remaining phases blocked on upstream tasks:**
+- Phase 1 (web-app webhook handler + customer-center "Upgrade" button): a `POST /api/billing/webhook` endpoint that calls `ParseWebhook`, dispatches by `event.Type`, and updates the User row. Plus a customer-center page that renders a "Choose tier" UI and redirects to `CreateCheckoutSession`. Needs the price IDs to exist in Stripe (the deployment overlay creates them via the Stripe dashboard or Terraform Stripe provider) and a real webhook secret (`whsec_...`) on the deployment.
+- Phase 2 (dunning state machine): 3-retries / 14-day downgrade with email each step. Blocked on TASK-020 web-app email wiring.
+- Phase 3 (Stripe Tax / EU VAT): operator decision; can ship in Phase 1 by setting `automatic_tax: true` on the checkout session.
+
 ## Acceptance Criteria
-- [ ] Stripe checkout flow: signed-in user can upgrade to a paid tier and reach `success` page
-- [ ] Webhook receiver verifies signatures and updates `User.tier` + `User.stripeCustomerId`
-- [ ] Cancellation via Stripe Customer Portal downgrades the user (with grace period) — verified end-to-end
-- [ ] Failed payment triggers dunning email + downgrade after configured retries
-- [ ] All webhook handlers are idempotent (Stripe retries them)
+- [ ] Stripe checkout flow: signed-in user can upgrade to a paid tier and reach `success` page (Phase 1 — `CreateCheckoutSession` is ready in Phase 0)
+- [ ] Webhook receiver verifies signatures and updates `User.tier` + `User.stripeCustomerId` (Phase 1 — `ParseWebhook` is ready in Phase 0; the dispatch + DB update is Phase 1)
+- [ ] Cancellation via Stripe Customer Portal downgrades the user (with grace period) — verified end-to-end (Phase 1)
+- [ ] Failed payment triggers dunning email + downgrade after configured retries (Phase 2)
+- [ ] All webhook handlers are idempotent (Stripe retries them) (Phase 1)
+- [x] Phase 0: `pkg/stripe` SDK wrapper with checkout + subscription + webhook verification; integration-tested against real test mode (2026-05-03)
 
 ## Notes
 EU VAT / Mehrwertsteuer is non-trivial — strongly consider Paddle as merchant-of-record for the EU market unless we already have an accountant set up for cross-border B2C VAT.
