@@ -174,6 +174,50 @@ func TestPoolStoreSoftDeleteAndReclaimEmail(t *testing.T) {
 	}
 }
 
+func TestPoolStorePurgeDeletedBefore(t *testing.T) {
+	pool := newTestPool(t)
+	s, _ := New(pool)
+	ctx := context.Background()
+
+	// Create three users with different soft-delete timing.
+	u1, _ := s.Create(ctx, users.CreateParams{Email: "old@x.de", PasswordHash: "$argon2id$x", Tier: users.TierFree, Language: users.LangDE})
+	u2, _ := s.Create(ctx, users.CreateParams{Email: "recent@x.de", PasswordHash: "$argon2id$x", Tier: users.TierFree, Language: users.LangDE})
+	u3, _ := s.Create(ctx, users.CreateParams{Email: "active@x.de", PasswordHash: "$argon2id$x", Tier: users.TierFree, Language: users.LangDE})
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SoftDelete(ctx, u1.ID, now.Add(-2*users.GracePeriod)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SoftDelete(ctx, u2.ID, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// u3 stays active.
+
+	purged, err := s.PurgeDeletedBefore(ctx, now.Add(-users.GracePeriod))
+	if err != nil {
+		t.Fatalf("PurgeDeletedBefore: %v", err)
+	}
+	if purged != 1 {
+		t.Errorf("purged = %d, want 1 (past-grace only)", purged)
+	}
+
+	// Past-grace row gone — even raw SELECT shouldn't find it.
+	var n int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE id = $1`, u1.ID).Scan(&n)
+	if n != 0 {
+		t.Errorf("past-grace row still present, got %d", n)
+	}
+	// Within-grace row still there (soft-deleted but not purged).
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE id = $1 AND deleted_at IS NOT NULL`, u2.ID).Scan(&n)
+	if n != 1 {
+		t.Errorf("within-grace row should be present and soft-deleted, got count=%d", n)
+	}
+	// Active row untouched.
+	if _, err := s.GetByID(ctx, u3.ID); err != nil {
+		t.Errorf("active user must be untouched, got %v", err)
+	}
+}
+
 func TestPoolStoreNewRejectsNilPool(t *testing.T) {
 	t.Parallel()
 	if _, err := New(nil); err == nil {

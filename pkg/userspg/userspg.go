@@ -208,6 +208,20 @@ func (s *PoolStore) SoftDelete(ctx context.Context, id string, at time.Time) err
 	return err
 }
 
+// PurgeDeletedBefore hard-deletes every soft-deleted user older than the
+// cutoff. The GDPR cron (TASK-021 Phase 2) calls this with
+// `time.Now().Add(-users.GracePeriod)` once a day.
+func (s *PoolStore) PurgeDeletedBefore(ctx context.Context, before time.Time) (int, error) {
+	tag, err := s.Pool.Exec(ctx,
+		`DELETE FROM users WHERE deleted_at IS NOT NULL AND deleted_at < $1`,
+		before.UTC(),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // scanUser knows the exact column order returned by every Get/Insert query
 // in this package — keep the SELECT lists in the queries above in sync.
 func scanUser(row pgx.Row) (*users.User, error) {

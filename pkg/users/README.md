@@ -25,6 +25,7 @@ u, err := s.Create(ctx, users.CreateParams{
 | `UpdateStripeCustomerID(id, stripe)` | Set after first checkout |
 | `MarkEmailVerified(id, t)` / `RecordLogin(id, t)` | Audit timestamps |
 | `SoftDelete(id, t)` | Sets `deleted_at`; subsequent lookups return `ErrNotFound`; email is reclaimable so a new signup can use it during the GDPR grace window |
+| `PurgeDeletedBefore(before)` | Hard-deletes every soft-deleted user older than the cutoff. Returns the count purged. The GDPR cron (TASK-021 Phase 2) calls this with `time.Now() - users.GracePeriod` once a day. |
 
 ## Storage backends
 
@@ -70,5 +71,5 @@ This package does CRUD on the User row. Other concerns live elsewhere:
 - **Email verification / password reset tokens** → not yet (TASK-013 + TASK-020).
 - **Quota enforcement** → operator (TASK-019).
 - **Stripe webhooks** → web/billing (TASK-016) writes back via `UpdateTier` + `UpdateStripeCustomerID`.
-- **GDPR hard-delete** → cron (TASK-021) reads `deleted_at` and purges past the grace window.
+- **GDPR hard-delete** → cron (TASK-021 Phase 2) reads `deleted_at` and purges past `users.GracePeriod` (30 days). The primitive (`PurgeDeletedBefore`) is implemented in pkg/users + pkg/userspg; the cron workload itself lives in `swarm-cloud` deploy overlay (it's a CronJob with RBAC scoped to one namespace).
 - **Per-user workspace listing** → operator label `swarm.io/user-id=<id>` plus a `kubectl get kaiinstance` selector. Lives at the consumer layer, not in this package.

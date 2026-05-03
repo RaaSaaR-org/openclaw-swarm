@@ -84,7 +84,19 @@ type Store interface {
 	MarkEmailVerified(ctx context.Context, id string, at time.Time) error
 	RecordLogin(ctx context.Context, id string, at time.Time) error
 	SoftDelete(ctx context.Context, id string, at time.Time) error
+	// PurgeDeletedBefore hard-deletes every User with `deleted_at` strictly
+	// older than `before`. Returns the count purged. The GDPR cron
+	// (TASK-021 Phase 2) calls this with `time.Now() - GracePeriod` once a
+	// day. Hard-deleted rows are gone — the audit table records that the
+	// deletion happened (id hash + timestamp, no PII).
+	PurgeDeletedBefore(ctx context.Context, before time.Time) (int, error)
 }
+
+// GracePeriod is the soft-delete window: how long a SoftDeleted user can
+// reverse course (a future "undelete" UI) before the cron hard-deletes the
+// row. 30 days matches the privacy-page commitment ("hard deletion within
+// 30 days").
+const GracePeriod = 30 * 24 * time.Hour
 
 // Sentinel errors so callers branch on the failure mode without parsing
 // strings. Keep this list short — every entry is a contract that

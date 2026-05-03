@@ -167,6 +167,20 @@ func (s *MemoryStore) SoftDelete(_ context.Context, id string, at time.Time) err
 	return nil
 }
 
+func (s *MemoryStore) PurgeDeletedBefore(_ context.Context, before time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := before.UTC()
+	purged := 0
+	for id, u := range s.byID {
+		if u.DeletedAt != nil && u.DeletedAt.Before(cutoff) {
+			delete(s.byID, id)
+			purged++
+		}
+	}
+	return purged, nil
+}
+
 // validEmail keeps the rule simple: parseable per RFC 5322 and contains '@'.
 // Stricter validation (MX lookup, plus-addressing rules) belongs at the
 // signup-form layer, not here.

@@ -226,6 +226,58 @@ func TestValidApp(t *testing.T) {
 	}
 }
 
+func TestMemoryStorePurgeDeletedBefore(t *testing.T) {
+	t.Parallel()
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	// Three users, varying soft-delete ages.
+	cutoff := time.Unix(1_700_000_000, 0)
+	old := newCreate()
+	old.Email = "old@example.org"
+	uOld, _ := s.Create(ctx, old)
+	_ = s.SoftDelete(ctx, uOld.ID, cutoff.Add(-2*GracePeriod)) // way past grace
+
+	recent := newCreate()
+	recent.Email = "recent@example.org"
+	uRecent, _ := s.Create(ctx, recent)
+	_ = s.SoftDelete(ctx, uRecent.ID, cutoff.Add(-1*time.Hour)) // 1h ago — within grace
+
+	active := newCreate()
+	active.Email = "active@example.org"
+	uActive, _ := s.Create(ctx, active)
+	// Active not soft-deleted at all.
+
+	purged, err := s.PurgeDeletedBefore(ctx, cutoff.Add(-GracePeriod))
+	if err != nil {
+		t.Fatalf("PurgeDeletedBefore: %v", err)
+	}
+	if purged != 1 {
+		t.Errorf("purged = %d, want 1 (only the past-grace one)", purged)
+	}
+	// Past-grace row gone.
+	if _, err := s.GetByID(ctx, uOld.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("past-grace user must be hard-deleted, got %v", err)
+	}
+	// Recent (within grace) row still present (soft-deleted but recoverable
+	// in principle — GetByID returns ErrNotFound for soft-deleted users
+	// already, but the row data is still in the map).
+	if _, ok := s.byID[uRecent.ID]; !ok {
+		t.Error("within-grace user must NOT be hard-deleted")
+	}
+	// Active user untouched.
+	if _, err := s.GetByID(ctx, uActive.ID); err != nil {
+		t.Errorf("active user must be untouched, got %v", err)
+	}
+}
+
+func TestGracePeriodIs30Days(t *testing.T) {
+	t.Parallel()
+	if GracePeriod != 30*24*time.Hour {
+		t.Errorf("GracePeriod = %v, want 30 days (privacy-page commitment)", GracePeriod)
+	}
+}
+
 func TestMemoryStoreCloneIsolation(t *testing.T) {
 	t.Parallel()
 	s := NewMemoryStore()
