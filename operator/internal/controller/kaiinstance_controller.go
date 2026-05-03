@@ -48,6 +48,14 @@ type KaiInstanceReconciler struct {
 	// per-tenant wiring (BYOK-shaped) for backwards-compat with existing deploys.
 	// Set via env var SWARM_POOLED_OPENROUTER_SECRET — see PROP-002 (pooled-only).
 	PooledOpenRouterSecret string
+
+	// CatalogDir is the on-disk path where the agents/catalog/ tree is mounted
+	// (in production, a ConfigMap projected by the swarm-cloud / swarm-emai
+	// overlay; in dev, the operator binary's parent directory's `agents/catalog`
+	// path). Empty disables the catalog renderer — every workspace falls back
+	// to the embedded customer-template, regardless of `spec.appRef`. Set via
+	// env var KAI_CATALOG_DIR; default `/etc/swarm/catalog` (TASK-018 Phase 1).
+	CatalogDir string
 }
 
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances,verbs=get;list;watch;create;update;patch;delete
@@ -132,6 +140,9 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		CustomerName: kai.Spec.CustomerName,
 		CustomerSlug: slug,
 		ProjectName:  kai.Spec.ProjectName,
+	}, templateOpts{
+		CatalogDir: r.CatalogDir,
+		AppRef:     kai.Spec.AppRef,
 	})
 	if err != nil {
 		return ctrl.Result{}, r.setFailed(ctx, &kai, "TemplateRenderError", err)

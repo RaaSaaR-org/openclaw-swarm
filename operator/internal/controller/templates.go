@@ -20,6 +20,8 @@ import (
 	"crypto/sha256"
 	"embed"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -70,9 +72,32 @@ type renderedTemplates struct {
 	SkillMC      string
 }
 
+// templateOpts carries reconciler-level config that affects template
+// rendering (TASK-018 Phase 1). The catalog dir holds the SaaS catalog
+// personas (`agents/catalog/<slug>/SOUL.md.tmpl`); when a KaiInstance
+// has `spec.appRef` set, the operator uses that persona's SOUL.md
+// instead of the embedded customer-template default. Empty CatalogDir
+// or empty AppRef → embedded fallback (legacy behavior preserved).
+type templateOpts struct {
+	CatalogDir string // e.g. "/etc/swarm/catalog"; ConfigMap-mounted in production
+	AppRef     string // catalog persona slug from KaiInstance.Spec.AppRef
+}
+
 // renderAllTemplates renders all agent templates and returns them.
-func renderAllTemplates(vars templateVars) (*renderedTemplates, error) {
-	soul, err := renderTemplate("SOUL.md.tmpl", vars)
+//
+// SOUL.md sourcing priority:
+//   1. Catalog at `<CatalogDir>/<AppRef>/SOUL.md.tmpl` if both set and the
+//      file exists. This is the SaaS path (TASK-018 Phase 1).
+//   2. Embedded `templates/SOUL.md.tmpl` — the legacy customer-template,
+//      used for tenants without `spec.appRef` (internal EmAI workspaces
+//      and any pre-SaaS-direction tenant in `swarm-emai`/`swarm-config`).
+//
+// Other template files (AGENTS, TOOLS, HEARTBEAT, openclaw.json,
+// SKILL-mc) always come from the embedded set today — they're operator
+// infrastructure, not per-persona content. A future phase can add
+// per-persona AGENTS.md if a use case emerges.
+func renderAllTemplates(vars templateVars, opts templateOpts) (*renderedTemplates, error) {
+	soul, err := renderSoul(vars, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +130,47 @@ func renderAllTemplates(vars templateVars) (*renderedTemplates, error) {
 		OpenClawJSON: config,
 		SkillMC:      string(skillMC),
 	}, nil
+}
+
+// renderSoul picks the SOUL.md source per the priority above and renders
+// the placeholders. Catalog templates use a richer placeholder set
+// (`{{WORKSPACE_NAME}}`, `{{USER_NAME}}`, `{{APP_NAME}}`) per the
+// `agents/catalog/README.md` schema; the embedded customer-template uses
+// the legacy `{{CUSTOMER_*}}` set. Both are resolved here.
+func renderSoul(vars templateVars, opts templateOpts) (string, error) {
+	if opts.CatalogDir != "" && opts.AppRef != "" {
+		path := filepath.Join(opts.CatalogDir, opts.AppRef, "SOUL.md.tmpl")
+		raw, err := os.ReadFile(path)
+		if err == nil {
+			return renderCatalogPlaceholders(string(raw), vars), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("reading catalog SOUL %s: %w", path, err)
+		}
+		// Missing file → fall through to embedded default. The catalog can
+		// drift behind `spec.appRef` when the catalog ConfigMap hasn't been
+		// updated to include a newly-curated persona; a workspace pointing
+		// at the missing slug shouldn't break — it should boot with the
+		// legacy template and the operator's reconcile log records the
+		// fallback for the operator to investigate.
+	}
+	return renderTemplate("SOUL.md.tmpl", vars)
+}
+
+// renderCatalogPlaceholders substitutes the catalog template placeholders
+// (per agents/catalog/README.md schema). USER_NAME defaults to the email's
+// local part for SaaS workspaces — until pkg/users gains a separate
+// display-name field, this is the friendly name we have. APP_NAME is left
+// to a future enhancement (needs metadata.yaml lookup).
+func renderCatalogPlaceholders(body string, vars templateVars) string {
+	userName := vars.CustomerName
+	if at := strings.Index(userName, "@"); at >= 0 {
+		userName = userName[:at]
+	}
+	body = strings.ReplaceAll(body, "{{WORKSPACE_NAME}}", vars.CustomerName)
+	body = strings.ReplaceAll(body, "{{USER_NAME}}", userName)
+	body = strings.ReplaceAll(body, "{{APP_NAME}}", vars.CustomerSlug)
+	return body
 }
 
 // configHash computes a SHA256 hash of all rendered templates plus the model string.

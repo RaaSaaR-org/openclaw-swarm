@@ -62,18 +62,22 @@ Direct quote from the user's product framing: *"users can get some 'kai instance
 
 **Phase 0 (catalog content) — done** on 2026-05-03. Six starter apps live under `agents/catalog/` with `SOUL.md.tmpl` + `metadata.yaml` + `icon.svg`, plus a `README.md` documenting the schema. Each app uses `{{WORKSPACE_NAME}}` / `{{USER_NAME}}` placeholders (no `CUSTOMER_*` per public-repo terminology rule). Apps: `personal-assistant`, `coding-helper`, `writing-coach`, `language-tutor`, `study-buddy`, `productivity-companion`.
 
+**Phase 1 (operator catalog renderer) — done** on 2026-05-03. Operator now reads catalog SOUL.md.tmpl files at runtime from a configurable path (`KAI_CATALOG_DIR` env, default `/etc/swarm/catalog`). When a KaiInstance has `spec.appRef` set AND `<dir>/<appRef>/SOUL.md.tmpl` exists, that file becomes the per-tenant SOUL.md instead of the embedded customer-template. Catalog templates use the new placeholder set per `agents/catalog/README.md` schema (`{{WORKSPACE_NAME}}`, `{{USER_NAME}}` — auto-derived from email's local part, `{{APP_NAME}}`); the embedded customer-template keeps its legacy `{{CUSTOMER_*}}` placeholders. Falls back to embedded gracefully when `appRef` is empty (legacy tenant), the catalog dir is missing (no overlay mount yet), or the specific persona file is missing (catalog ConfigMap drifted behind a freshly-curated slug). Five new tests cover all four paths (catalog hit, catalog miss → fallback, no AppRef → fallback, USER_NAME email-localpart derivation). Deployment-overlay wiring documented in `operator/config/manager/manager.yaml` with the kubectl ConfigMap-create command.
+
+**Phase 3 (signup `?app=<slug>` → KaiInstance with persona) — done** on 2026-05-03 via [[TASK-013]] Phase 1.B (signup carries `app` field, stored on User row, used at verify time to set `spec.appRef`). Combined with Phase 1 here: a user picking `writing-coach` at signup gets a workspace whose SOUL.md is the writing-coach persona, end-to-end.
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (operator catalog renderer): blocked on [[TASK-012]] CRD evolution adding `spec.appRef`.
-- Phase 2 (catalog page in customer-center): blocked on [[TASK-014]] (per-user view).
-- Phase 3 (signup `?app=<slug>` → KaiInstance with persona): blocked on [[TASK-013]].
-- Phase 4 (switch-app action): blocked on [[TASK-014]].
+- Phase 2 (catalog page in customer-center): blocked on [[TASK-014]] Phase 2 (customer-center swap from per-tenant Secret to Postgres lookup) — needs the dashboard rewrite to know the user's identity before it can render their catalog choice.
+- Phase 4 (switch-app action — change `spec.appRef` on an existing workspace, confirm "persona will reset"): blocked on Phase 2 (needs dashboard).
+- Phase 5 (one-screen preview of the persona — show sample SOUL excerpt + suggested first prompts): blocked on Phase 2 + a small metadata.yaml read on the dashboard side.
 
 ## Acceptance Criteria
 - [x] At least 5 starter apps live under `agents/catalog/` with `SOUL.md` + `metadata.yaml` + `icon.svg` (6 shipped 2026-05-03)
-- [ ] Catalog page renders all apps with category filter
-- [ ] Signup with `?app=<slug>` produces a KaiInstance with that persona
-- [ ] User can switch apps from customer-center, with confirmation prompt
-- [ ] Each app has a one-screen "preview" (sample SOUL.md, suggested first prompts)
+- [ ] Catalog page renders all apps with category filter (Phase 2 — marketing site at swarm-cloud/web/marketing/agents.astro shows the catalog; the dashboard equivalent is Phase 2)
+- [x] Signup with `?app=<slug>` produces a KaiInstance with that persona (Phase 3 — TASK-013 Phase 1.B + Phase 1 here)
+- [ ] User can switch apps from customer-center, with confirmation prompt (Phase 4)
+- [ ] Each app has a one-screen "preview" (sample SOUL.md, suggested first prompts) (Phase 5)
+- [x] Phase 1: operator reads catalog SOUL.md.tmpl from KAI_CATALOG_DIR when spec.appRef is set; falls back to embedded customer-template otherwise (2026-05-03)
 
 ## Notes
 The app catalog is the **product story** for SaaS — it's what the marketing landing page (TASK-022) is selling. Don't ship signup without at least 3 working apps in the catalog.

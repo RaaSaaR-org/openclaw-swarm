@@ -2,6 +2,8 @@ package controller
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -96,7 +98,7 @@ func TestRenderAllTemplates(t *testing.T) {
 		ProjectName:  "Test Project",
 	}
 
-	tmpl, err := renderAllTemplates(vars)
+	tmpl, err := renderAllTemplates(vars, templateOpts{})
 	if err != nil {
 		t.Fatalf("renderAllTemplates() error: %v", err)
 	}
@@ -144,7 +146,7 @@ func TestOpenClawJSONValid(t *testing.T) {
 		ProjectName:  "Test",
 	}
 
-	tmpl, err := renderAllTemplates(vars)
+	tmpl, err := renderAllTemplates(vars, templateOpts{})
 	if err != nil {
 		t.Fatalf("renderAllTemplates() error: %v", err)
 	}
@@ -179,7 +181,7 @@ func TestConfigHash(t *testing.T) {
 		ProjectName:  "Test",
 	}
 
-	tmpl, err := renderAllTemplates(vars)
+	tmpl, err := renderAllTemplates(vars, templateOpts{})
 	if err != nil {
 		t.Fatalf("renderAllTemplates() error: %v", err)
 	}
@@ -210,7 +212,7 @@ func TestSkillMCContents(t *testing.T) {
 		ProjectName:  "Test",
 	}
 
-	tmpl, err := renderAllTemplates(vars)
+	tmpl, err := renderAllTemplates(vars, templateOpts{})
 	if err != nil {
 		t.Fatalf("renderAllTemplates() error: %v", err)
 	}
@@ -229,5 +231,105 @@ func TestSkillMCContents(t *testing.T) {
 		if strings.HasPrefix(trimmed, "./mc ") && !strings.HasPrefix(trimmed, "./mc -y") {
 			t.Errorf("skill mc command missing -y flag: %q", trimmed)
 		}
+	}
+}
+
+// catalogFixture writes a minimal catalog tree to a temp dir and returns
+// the dir path. Mirrors the agents/catalog/<slug>/SOUL.md.tmpl shape.
+func catalogFixture(t *testing.T, slug, soulBody string) string {
+	t.Helper()
+	dir := t.TempDir()
+	personaDir := filepath.Join(dir, slug)
+	if err := os.MkdirAll(personaDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(personaDir, "SOUL.md.tmpl"), []byte(soulBody), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return dir
+}
+
+func TestRenderAllTemplatesUsesCatalogSoulWhenAppRefSet(t *testing.T) {
+	t.Parallel()
+	catalogDir := catalogFixture(t, "writing-coach", "# {{WORKSPACE_NAME}} — Writing Coach\n\nHi {{USER_NAME}}, app={{APP_NAME}}.")
+
+	vars := templateVars{CustomerName: "alice@example.org", CustomerSlug: "alice", ProjectName: "Workspace"}
+	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: "writing-coach"})
+	if err != nil {
+		t.Fatalf("renderAllTemplates: %v", err)
+	}
+	if !strings.Contains(tmpl.SoulMD, "Writing Coach") {
+		t.Errorf("SOUL.md should be from catalog, got: %q", tmpl.SoulMD)
+	}
+	// Catalog placeholders resolved.
+	if !strings.Contains(tmpl.SoulMD, "alice@example.org") {
+		t.Errorf("WORKSPACE_NAME should be substituted, got: %q", tmpl.SoulMD)
+	}
+	if !strings.Contains(tmpl.SoulMD, "Hi alice,") {
+		t.Errorf("USER_NAME should be email local part, got: %q", tmpl.SoulMD)
+	}
+	if !strings.Contains(tmpl.SoulMD, "app=alice") {
+		t.Errorf("APP_NAME placeholder should be substituted, got: %q", tmpl.SoulMD)
+	}
+	// AGENTS.md and friends still come from the embedded set — only SOUL is
+	// per-persona.
+	if !strings.Contains(tmpl.AgentsMD, "alice") && !strings.Contains(tmpl.AgentsMD, "Alice") {
+		// AgentsMD uses CustomerName/CustomerSlug too, just confirm it rendered.
+		t.Logf("AGENTS.md content (first 100 chars): %.100s", tmpl.AgentsMD)
+	}
+}
+
+func TestRenderAllTemplatesFallsBackWhenAppRefMissing(t *testing.T) {
+	t.Parallel()
+	// CatalogDir set but the appRef doesn't exist on disk → must fall back to
+	// the embedded customer-template, NOT error. This protects against the
+	// catalog ConfigMap drifting behind a freshly-curated persona slug.
+	catalogDir := t.TempDir()
+	vars := templateVars{CustomerName: "Acme GmbH", CustomerSlug: "acme", ProjectName: "Robotik Pilot"}
+	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: "does-not-exist"})
+	if err != nil {
+		t.Fatalf("renderAllTemplates: %v", err)
+	}
+	// Embedded template uses {{CUSTOMER_NAME}} → expanded to "Acme GmbH".
+	if !strings.Contains(tmpl.SoulMD, "Acme GmbH") {
+		t.Errorf("expected fallback to embedded template (with CUSTOMER_NAME=Acme GmbH), got: %.200s", tmpl.SoulMD)
+	}
+}
+
+func TestRenderAllTemplatesIgnoresCatalogWhenAppRefEmpty(t *testing.T) {
+	t.Parallel()
+	// AppRef empty (legacy tenant) → embedded template, even if catalogDir
+	// points at a real catalog.
+	catalogDir := catalogFixture(t, "writing-coach", "# Catalog content")
+	vars := templateVars{CustomerName: "Acme GmbH", CustomerSlug: "acme", ProjectName: "X"}
+	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: ""})
+	if err != nil {
+		t.Fatalf("renderAllTemplates: %v", err)
+	}
+	if strings.Contains(tmpl.SoulMD, "Catalog content") {
+		t.Errorf("legacy tenant (no AppRef) must NOT pick catalog SOUL, got: %s", tmpl.SoulMD)
+	}
+	if !strings.Contains(tmpl.SoulMD, "Acme GmbH") {
+		t.Errorf("expected embedded template with CUSTOMER_NAME, got: %.200s", tmpl.SoulMD)
+	}
+}
+
+func TestRenderCatalogPlaceholdersUsesEmailLocalPart(t *testing.T) {
+	t.Parallel()
+	body := "Hello {{USER_NAME}}!"
+	got := renderCatalogPlaceholders(body, templateVars{CustomerName: "alice.smith@example.de"})
+	if got != "Hello alice.smith!" {
+		t.Errorf("renderCatalogPlaceholders = %q, want 'Hello alice.smith!'", got)
+	}
+}
+
+func TestRenderCatalogPlaceholdersHandlesNonEmailName(t *testing.T) {
+	t.Parallel()
+	// Non-email name (e.g. internal tenant where CustomerName is "Acme GmbH"):
+	// USER_NAME falls through to the full string.
+	body := "Hello {{USER_NAME}}!"
+	got := renderCatalogPlaceholders(body, templateVars{CustomerName: "Acme GmbH"})
+	if got != "Hello Acme GmbH!" {
+		t.Errorf("renderCatalogPlaceholders = %q, want 'Hello Acme GmbH!'", got)
 	}
 }

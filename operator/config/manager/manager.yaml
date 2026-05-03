@@ -79,6 +79,26 @@ spec:
           # (swarm-cloud / swarm-emai), not the public swarm repo.
           # - name: SWARM_POOLED_OPENROUTER_SECRET
           #   value: "swarm-pooled-openrouter"
+          #
+          # KAI_CATALOG_DIR is where the operator reads the SaaS app catalog
+          # from at runtime (TASK-018 Phase 1). When a KaiInstance has
+          # `spec.appRef` set, the operator looks for
+          # `<dir>/<appRef>/SOUL.md.tmpl` and uses that persona's SOUL.md
+          # instead of the embedded customer-template default. Default
+          # `/etc/swarm/catalog`. The deployment overlay creates a ConfigMap
+          # from `agents/catalog/` and mounts it at this path:
+          #
+          #   kubectl create configmap agents-catalog \
+          #     --from-file=agents/catalog/personal-assistant/SOUL.md.tmpl \
+          #     --from-file=agents/catalog/coding-helper/SOUL.md.tmpl \
+          #     ... etc.
+          #
+          # Or use the projected-config pattern with a sub-directory per slug
+          # (matches the on-disk layout in agents/catalog/). The operator
+          # tolerates a missing dir/file — falls back to the embedded
+          # customer-template — so this is safe to wire up incrementally.
+          - name: KAI_CATALOG_DIR
+            value: "/etc/swarm/catalog"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true
