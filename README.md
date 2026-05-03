@@ -4,13 +4,15 @@ Multi-instance deployment platform for [OpenClaw](https://docs.openclaw.ai) AI a
 
 ## Architecture
 
-A **Swarm Operator** watches `KaiInstance` custom resources and creates an isolated OpenClaw pod per customer. The **Chat UI** connects to each pod via WebSocket.
+A **Swarm Operator** watches `KaiInstance` custom resources and creates an isolated OpenClaw pod per tenant. Five web apps sit in front: chat (tenant-facing), center (tenant admin), admin-console (platform operator), onboarding (provisioning API), and status-page (per-tenant public status).
 
-Each customer gets:
+→ **Read [`docs/architecture.md`](docs/architecture.md) for the full picture** — per-app responsibilities, the two auth models, what each app reads/writes in K8s, and a sequence diagram of a new tenant from zero to working chat.
+
+Each tenant gets:
 - **Isolated OpenClaw instance** in its own pod with PVC
 - **Own SOUL.md** defining the agent's persona and scope
-- **Network isolation** — customer pods cannot reach each other
-- **Web Chat + Telegram** — customer-facing channels
+- **Network isolation** — tenant pods cannot reach each other
+- **Web Chat + Telegram** — user-facing channels
 - **LLM via OpenRouter** — configurable model per instance (free tier available)
 
 ## Quick Start
