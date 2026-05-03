@@ -4,7 +4,7 @@ aliases:
 - TASK-022
 title: SaaS marketing landing + pricing page (separate from NeoDEM landing)
 slug: saas-marketing-landing-pricing-page-separate-from-neodem-landing
-status: backlog
+status: in-progress
 priority: 3
 owner: ''
 projects: []
@@ -18,6 +18,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # SaaS marketing landing + pricing page (separate from NeoDEM landing)
@@ -59,13 +60,32 @@ A SaaS needs a public face — value prop, screenshots, demo, app catalog (TASK-
 - Hosted demo agent (try-before-signup) or just a video? Default: video for v1; hosted demo is a great hook but takes a dedicated abuse story (anon CAPTCHA, hard rate limit, separate pooled key with tiny budget).
 - Hosting: Cloudflare Pages (free, global edge, easy deploy) vs Vercel (better Astro integration but vendor lock-in)? Default: Cloudflare Pages — own DNS at Hetzner, Cloudflare Pages can serve from any DNS.
 
+## Status
+
+**Phase 0 (Astro skeleton) — done** on 2026-05-03, in **`swarm-cloud/web/marketing/`** (sibling directory of this `swarm/` repo at `~/develop/emai/swarm-cloud/`). Astro 5 static site with all 7 pages from the task (`/`, `/apps`, `/pricing`, `/signup`, `/privacy`, `/terms`, `/imprint`). Dark theme `#141414` base + `#FF6700` accent per CLAUDE.md. The catalog page reads `swarm/agents/catalog/<slug>/metadata.yaml` at build time via Node `fs` (cross-repo path; production overrides via `SWARM_CATALOG_PATH` env var) — same source as customer-center, zero duplication. All 6 catalog apps render (verified end-to-end: `npm run build` from `swarm-cloud/web/marketing/` → 7 HTML files including all 6 apps grouped by category → Playwright on the in-repo build showed zero console errors).
+
+**The site does not live in the public `swarm` repo** — an earlier commit (`b81113e`) landed it there by mistake; reverted by `393897d` and re-shipped in the swarm-cloud sibling per the locked-in spot. swarm-cloud is currently a sibling directory on the dev machine; it becomes its own git repo when [[TASK-023]] phases the actual three-repo split.
+
+**Locked-in spot is `swarm-cloud/web/marketing/`** ([[PROP-003]] / [[TASK-023]]).
+
+**Open questions — closed:**
+- Hosting: Cloudflare Pages (free, global edge, own DNS at Hetzner) — locked, just call it out in the deploy doc.
+- Hosted demo vs video: deferred to Phase 1+ (needs the abuse story).
+
+**Remaining phases blocked on upstream tasks:**
+- Phase 1 (DE + EN bilingual via Astro i18n routing + hreflang): the German strings already exist in `agents/catalog/<slug>/metadata.yaml` (`nameDe` / `shortDescriptionDe`); just needs the Astro i18n config + DE pages.
+- Phase 2 (pricing buttons → Stripe checkout): blocked on [[TASK-016]] Phase 1 (Stripe webhook + price IDs).
+- Phase 3 (inline signup form): blocked on [[TASK-013]] Phase 3 (SPA-side signup form).
+- Phase 4 (OG tags + structured data + sitemap.xml + Lighthouse ≥ 95): production polish.
+- Phase 5 (swarm-cloud becomes a real git repo): triggered by [[TASK-023]] Phase 2 (the actual repo split, gated on Stripe arriving in [[TASK-016]]).
+
 ## Acceptance Criteria
-- [ ] Live marketing site at chosen domain with: home, apps, pricing, privacy, terms, imprint
-- [ ] Bilingual (DE + EN) with proper hreflang tags
-- [ ] App catalog driven by same `agents/catalog/` source as customer-center (no duplication)
-- [ ] Pricing table linked to Stripe checkout
-- [ ] Lighthouse score ≥ 95 on home page
-- [ ] OG tags + structured data for rich link previews
+- [x] Live marketing site at chosen domain with: home, apps, pricing, privacy, terms, imprint (Phase 0 — site exists in swarm-cloud; "live at chosen domain" is Phase 5 deploy concern)
+- [ ] Bilingual (DE + EN) with proper hreflang tags (Phase 1)
+- [x] App catalog driven by same `agents/catalog/` source as customer-center (no duplication) (Phase 0 — `src/data/catalog.ts` reads `../../../../../swarm/agents/catalog/` at build time)
+- [ ] Pricing table linked to Stripe checkout (Phase 2 — buttons currently link to `/signup?tier=…`)
+- [ ] Lighthouse score ≥ 95 on home page (Phase 4)
+- [ ] OG tags + structured data for rich link previews (Phase 4 — basic OG tags shipped in Phase 0)
 
 ## Notes
 Don't ship before we have an actual demo to show — a marketing site for a vapor product is worse than no site. Pair the launch with TASK-013 (signup) + TASK-018 (≥3 working apps).
