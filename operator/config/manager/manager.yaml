@@ -99,6 +99,17 @@ spec:
           # customer-template — so this is safe to wire up incrementally.
           - name: KAI_CATALOG_DIR
             value: "/etc/swarm/catalog"
+          # KAI_PER_SLUG_INGRESS=1 makes the operator render per-tenant
+          # Ingresses with host `<slug>.<INGRESS_DOMAIN>` + path `/ws`
+          # (the SaaS shape — wildcard cert from TASK-017 Phase 0 covers
+          # it). Default (unset) keeps the legacy shared host
+          # `<INGRESS_DOMAIN>` + path `/ws/<slug>` so existing tenants
+          # don't get their URLs broken on a hot operator deploy.
+          # Flip this only AFTER the deployment overlay has updated each
+          # tenant's chat-bridge config to point at the new URL — see
+          # TASK-017 Phase 2+ for the cutover playbook.
+          # - name: KAI_PER_SLUG_INGRESS
+          #   value: "1"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true

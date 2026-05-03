@@ -202,6 +202,7 @@ func main() {
 	if catalogDir == "" {
 		catalogDir = "/etc/swarm/catalog"
 	}
+	perSlugIngress := os.Getenv("KAI_PER_SLUG_INGRESS") == "1" || os.Getenv("KAI_PER_SLUG_INGRESS") == "true"
 
 	if err := (&controller.KaiInstanceReconciler{
 		Client:                 mgr.GetClient(),
@@ -210,6 +211,7 @@ func main() {
 		IngressTLSSecret:       ingressTLSSecret,
 		PooledOpenRouterSecret: os.Getenv("SWARM_POOLED_OPENROUTER_SECRET"),
 		CatalogDir:             catalogDir,
+		PerSlugSubdomain:       perSlugIngress,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "KaiInstance")
 		os.Exit(1)

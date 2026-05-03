@@ -468,16 +468,40 @@ func gatewayURL(namespace, slug string) string {
 	return fmt.Sprintf("%s.%s.svc:%d", childName(slug), namespace, gatewayPort)
 }
 
-// externalURL returns the public URL for a KaiInstance.
-func externalURL(domain, slug string) string {
+// ingressOpts carries reconciler-level config that affects Ingress shape
+// (TASK-017 Phase 1). PerSlugSubdomain flips between two URL shapes:
+//
+//   - false (default, legacy): host=<domain>, path=/ws/<slug>. Existing
+//     tenants and chat-bridge clients keep their current URLs.
+//   - true: host=<slug>.<domain>, path=/ws. Each tenant gets its own
+//     subdomain — covered by the wildcard cert from TASK-017 Phase 0.
+//     Wildcard DNS A-record covers the host without per-slug DNS work.
+type ingressOpts struct {
+	PerSlugSubdomain bool
+}
+
+// externalURL returns the public URL for a KaiInstance, matching the
+// Ingress shape selected by PerSlugSubdomain.
+func externalURL(domain, slug string, opts ingressOpts) string {
+	if opts.PerSlugSubdomain {
+		return fmt.Sprintf("https://%s.%s/ws", slug, domain)
+	}
 	return fmt.Sprintf("https://%s/ws/%s", domain, slug)
 }
 
 // buildIngress creates the Traefik Ingress for external WebSocket access to a Kai agent.
-func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string) *networkingv1.Ingress {
+func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string, opts ingressOpts) *networkingv1.Ingress {
 	name := childName(slug)
 	pathType := networkingv1.PathTypePrefix
 	ingressClass := "traefik"
+
+	host := domain
+	path := "/ws/" + slug
+	if opts.PerSlugSubdomain {
+		host = slug + "." + domain
+		path = "/ws"
+	}
+
 	return &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name + "-ws",
@@ -493,18 +517,18 @@ func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string
 			IngressClassName: &ingressClass,
 			TLS: []networkingv1.IngressTLS{
 				{
-					Hosts:      []string{domain},
+					Hosts:      []string{host},
 					SecretName: tlsSecret,
 				},
 			},
 			Rules: []networkingv1.IngressRule{
 				{
-					Host: domain,
+					Host: host,
 					IngressRuleValue: networkingv1.IngressRuleValue{
 						HTTP: &networkingv1.HTTPIngressRuleValue{
 							Paths: []networkingv1.HTTPIngressPath{
 								{
-									Path:     "/ws/" + slug,
+									Path:     path,
 									PathType: &pathType,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{

@@ -551,7 +551,7 @@ func TestBuildNetworkPolicy(t *testing.T) {
 
 func TestBuildIngress(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
-	ing := buildIngress(kai, "test", "kai.emai.dev", "kai-tls")
+	ing := buildIngress(kai, "test", "kai.emai.dev", "kai-tls", ingressOpts{})
 
 	if ing.Name != "kai-test-ws" {
 		t.Errorf("Ingress name = %q, want 'kai-test-ws'", ing.Name)
@@ -562,13 +562,37 @@ func TestBuildIngress(t *testing.T) {
 		t.Error("Ingress should have TLS config with correct secret")
 	}
 
-	// Should route /ws/test to the service
-	path := ing.Spec.Rules[0].HTTP.Paths[0]
+	// Default mode (path-based): host=domain, path=/ws/<slug>
+	rule := ing.Spec.Rules[0]
+	if rule.Host != "kai.emai.dev" {
+		t.Errorf("default Ingress host = %q, want kai.emai.dev (legacy path-based)", rule.Host)
+	}
+	path := rule.HTTP.Paths[0]
 	if path.Path != "/ws/test" {
 		t.Errorf("Ingress path = %q, want '/ws/test'", path.Path)
 	}
 	if path.Backend.Service.Name != "kai-test" {
 		t.Errorf("Ingress backend = %q, want 'kai-test'", path.Backend.Service.Name)
+	}
+}
+
+func TestBuildIngressPerSlugSubdomain(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	ing := buildIngress(kai, "test", "kai.emai.dev", "kai-tls", ingressOpts{PerSlugSubdomain: true})
+
+	// Per-slug mode: host=<slug>.<domain>, path=/ws (no slug in path).
+	rule := ing.Spec.Rules[0]
+	if rule.Host != "test.kai.emai.dev" {
+		t.Errorf("per-slug Ingress host = %q, want test.kai.emai.dev", rule.Host)
+	}
+	path := rule.HTTP.Paths[0]
+	if path.Path != "/ws" {
+		t.Errorf("per-slug Ingress path = %q, want /ws (no slug in path)", path.Path)
+	}
+	// TLS host must match the rule host so the wildcard cert applies.
+	if len(ing.Spec.TLS) != 1 || ing.Spec.TLS[0].Hosts[0] != "test.kai.emai.dev" {
+		t.Errorf("per-slug TLS host = %v, want [test.kai.emai.dev]", ing.Spec.TLS[0].Hosts)
 	}
 }
 
@@ -581,9 +605,13 @@ func TestGatewayURL(t *testing.T) {
 }
 
 func TestExternalURL(t *testing.T) {
-	url := externalURL("kai.emai.dev", "east-side-fab")
-	expected := "https://kai.emai.dev/ws/east-side-fab"
-	if url != expected {
-		t.Errorf("externalURL = %q, want %q", url, expected)
+	t.Parallel()
+	// Default (path-based): preserves the legacy URL contract for existing tenants.
+	if got := externalURL("kai.emai.dev", "east-side-fab", ingressOpts{}); got != "https://kai.emai.dev/ws/east-side-fab" {
+		t.Errorf("default externalURL = %q, want path-based shape", got)
+	}
+	// Per-slug subdomain (TASK-017 Phase 1).
+	if got := externalURL("kai.emai.dev", "east-side-fab", ingressOpts{PerSlugSubdomain: true}); got != "https://east-side-fab.kai.emai.dev/ws" {
+		t.Errorf("per-slug externalURL = %q, want subdomain shape", got)
 	}
 }

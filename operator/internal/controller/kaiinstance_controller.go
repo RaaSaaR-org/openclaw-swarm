@@ -56,6 +56,16 @@ type KaiInstanceReconciler struct {
 	// to the embedded customer-template, regardless of `spec.appRef`. Set via
 	// env var KAI_CATALOG_DIR; default `/etc/swarm/catalog` (TASK-018 Phase 1).
 	CatalogDir string
+
+	// PerSlugSubdomain, when true, makes the operator render per-tenant
+	// Ingresses with `<slug>.<IngressDomain>` host + `/ws` path instead of
+	// the legacy shared `<IngressDomain>` host + `/ws/<slug>` path. Wildcard
+	// cert + wildcard DNS from TASK-017 Phase 0 cover the new shape. The
+	// flip changes the URL contract for every existing tenant — opt-in via
+	// env var KAI_PER_SLUG_INGRESS so deploys can roll out safely
+	// (existing tenants stay on path-based; SaaS-direction overlays opt
+	// in). TASK-017 Phase 1.
+	PerSlugSubdomain bool
 }
 
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances,verbs=get;list;watch;create;update;patch;delete
@@ -181,7 +191,7 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	kai.Status.Ready = ready
 	kai.Status.GatewayURL = gatewayURL(kai.Namespace, slug)
 	if kai.Spec.ExternalAccess == nil || *kai.Spec.ExternalAccess {
-		kai.Status.ExternalURL = externalURL(r.IngressDomain, slug)
+		kai.Status.ExternalURL = externalURL(r.IngressDomain, slug, ingressOpts{PerSlugSubdomain: r.PerSlugSubdomain})
 	} else {
 		kai.Status.ExternalURL = ""
 	}
@@ -333,7 +343,7 @@ func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarm
 		return r.Delete(ctx, &existing)
 	}
 
-	desired := buildIngress(kai, slug, r.IngressDomain, r.IngressTLSSecret)
+	desired := buildIngress(kai, slug, r.IngressDomain, r.IngressTLSSecret, ingressOpts{PerSlugSubdomain: r.PerSlugSubdomain})
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
 	}

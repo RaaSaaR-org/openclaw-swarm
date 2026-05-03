@@ -67,10 +67,11 @@ All manifests are inert until applied by the deployment overlay (`swarm-cloud` /
 - Hetzner DNS webhook provider: `cert-manager-webhook-hetzner` (vadimkim) — the de-facto choice, documented as the install command in `kubernetes/cert-manager/README.md`.
 - Apex cert: covered alongside the wildcard (`dnsNames` includes both `*.<domain>` and the apex) — one cert, two SANs.
 
+**Phase 1 (operator Ingress shape — opt-in) — done** on 2026-05-03. `buildIngress` now accepts `ingressOpts{PerSlugSubdomain bool}`; when true it renders `host: <slug>.<domain>` with `path: /ws` (TLS host matches so the wildcard cert from Phase 0 covers it). When false (default) it keeps the legacy `host: <domain>` + `path: /ws/<slug>` shape. Operator's `externalURL()` mirrors the same switch so `status.externalURL` stays consistent with what the Ingress publishes. Reconciler reads `KAI_PER_SLUG_INGRESS=1` from env to flip the flag — opt-in so existing tenants on a hot operator deploy don't get their URLs broken. Two new tests cover both modes; existing tests updated for the new (opts) signature. Documented in `operator/config/manager/manager.yaml` (commented opt-in block) with a note that the deployment overlay must update each tenant's chat-bridge config to the new URL BEFORE flipping the env var.
+
 **Remaining phases blocked on coordinated deploy:**
-- Phase 1 (operator Ingress shape): flip `buildIngress` from path-based (`<domain>/ws/<slug>`) to host-based (`<slug>.<domain>/ws`). This changes the URL contract for every existing tenant; needs to land with the `swarm-emai` overlay updating each tenant's chat-bridge config + a coordinated cutover. Tracked as a follow-up phase.
-- Phase 2 (operator status): `KaiInstance.status.externalURL` populated only after Ingress is admitted. Lands with Phase 1.
-- Phase 3 (cleanup verification): with wildcard cert + wildcard DNS shared across all tenants, per-slug deletion already works — Ingress goes via ownerRef cascade ([[TASK-003]] already handled). Phase 3 is just the verification check on the cluster after Phase 1 lands.
+- Phase 2 (overlay cutover playbook): swarm-cloud / swarm-emai update each tenant's chat-bridge config + the customer-chat / customer-center origin maps to point at the new subdomain shape. Then flip `KAI_PER_SLUG_INGRESS=1` on the operator. Per-overlay concern.
+- Phase 3 (cleanup verification on the cluster): with wildcard cert + wildcard DNS shared across all tenants, per-slug deletion already works — Ingress goes via ownerRef cascade ([[TASK-003]] already handled). Phase 3 is just the verification check after Phase 2's cutover.
 
 ## Acceptance Criteria
 - [ ] After provisioning, `https://<slug>.kai.example.com` serves a valid cert (Phase 1+)
