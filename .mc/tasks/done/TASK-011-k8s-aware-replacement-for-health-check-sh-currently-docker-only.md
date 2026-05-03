@@ -4,7 +4,7 @@ aliases:
 - TASK-011
 title: K8s-aware replacement for health-check.sh (currently Docker-only)
 slug: k8s-aware-replacement-for-health-check-sh-currently-docker-only
-status: backlog
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -18,6 +18,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # K8s-aware replacement for health-check.sh (currently Docker-only)
