@@ -45,8 +45,10 @@ A SaaS product without a payment loop is a free service with revenue plans. To c
 - TASK-015 (quotas — driven by tier which is driven by subscription)
 - TASK-020 (email — for billing receipts and dunning)
 
+## Decided
+- **Provider: Stripe** (locked in 2026-05-03). Paddle considered for merchant-of-record VAT handling; declined — keeping checkout / portal / SDK on the larger ecosystem. EU VAT handling becomes its own concern (Stripe Tax can do it; if not enabled, the operator's accountant handles cross-border B2C VAT manually).
+
 ## Open Questions
-- Stripe vs. Paddle (Paddle is merchant of record — handles VAT/sales tax for EU automatically; Stripe leaves that to us).
 - Trial period? 14-day no-card-needed trial is conventional; might be unnecessary if free tier is generous.
 - Invoice the user's email or expose downloadable invoices in customer-center?
 - One subscription per user, or per workspace? Subscription per user is simpler.

@@ -27,14 +27,19 @@ updated: 2026-05-03
 ## Why
 For a public SaaS, each user's chat needs its own URL — typically `<slug>.kai.example.com` — with a valid TLS cert. The operator already creates an Ingress, but DNS-record automation and per-host cert issuance are not wired up. Wildcard certs sidestep some of this but at the cost of cert sprawl and CT-log exposure of every customer slug. This is the boundary between "demo at a port-forward" and "shareable URL we can put on a landing page."
 
+## Decided
+- **Topology: wildcard cert + wildcard DNS** (locked in 2026-05-03). One `*.kai.emai.io` Let's Encrypt cert via DNS-01; one wildcard DNS A record `*.kai.emai.io` → ingress controller IP. Per-slug certs rejected because Let's Encrypt's 50 certs/week per registered domain ceiling caps signup throughput at ~7/day, and tenant slugs don't end up in CT logs (privacy win for B2C).
+- **DNS provider: Hetzner DNS** (locked in 2026-05-03). Already on Hetzner infra (per CLAUDE.md); free; supported by `external-dns`. Cloudflare considered for global DNS perf; rejected for v1 — Hetzner DNS is the native fit and one fewer vendor.
+- **Domain: `kai.emai.io`** (per [[TASK-022]] decision).
+- **Custom domains** (tenant brings their own `assistant.acme.de`) deferred to v2 as a paid-tier feature with HTTP-01 — clean separation, no early commitment.
+
 ## What
-- Pick the topology:
-  - **(A) Wildcard cert + wildcard DNS** (`*.kai.example.com` → ingress controller IP). Simplest. Cert via DNS-01 challenge. Slugs are still discoverable via CT logs only if specifically issued.
-  - **(B) Per-slug cert + per-slug DNS A record.** Most flexible (custom domains later) but requires DNS API automation per signup.
-- cert-manager with a `ClusterIssuer` (Let's Encrypt) — DNS-01 if doing wildcards, HTTP-01 if per-slug.
-- DNS automation: external-dns (declarative, reads Ingress annotations) is cleanest. Provider depends on where DNS lives (Cloudflare, Hetzner, Route53).
-- Operator updates `KaiInstance.status.externalURL` only after Ingress + cert are both ready.
-- Optional v2: support custom domains (user maps their own `assistant.example.com` to `<slug>.kai.example.com` via CNAME, we issue an HTTP-01 cert for it).
+- cert-manager + a `ClusterIssuer` for Let's Encrypt with DNS-01 against Hetzner DNS (uses [hetzner-dns-webhook](https://github.com/vadimkim/cert-manager-webhook-hetzner) or similar).
+- One `Certificate` resource for `*.kai.emai.io` in the ingress namespace; secret name `kai-emai-io-tls`.
+- `external-dns` deployed cluster-wide with the Hetzner DNS provider; reads Ingress annotations to keep the wildcard A record in sync with the ingress controller IP.
+- Operator updates `KaiInstance.status.externalURL` only after the per-slug Ingress is admitted (which it always is once the wildcard cert + DNS are ready). No per-slug cert wait state.
+- Document cert renewal monitoring: cert-manager fires events on renewal, surface them in Grafana.
+- Cleanup: when a `KaiInstance` is deleted ([[TASK-003]]), the per-slug Ingress goes via ownerRef cascade — wildcard cert + wildcard DNS A record are unaffected (they're shared).
 
 ## References
 - `/Users/heussers/develop/emai/swarm/operator/internal/controller/kaiinstance_controller.go` (Ingress creation logic)
@@ -45,9 +50,8 @@ For a public SaaS, each user's chat needs its own URL — typically `<slug>.kai.
 - Hetzner DNS provider for external-dns: https://github.com/kubernetes-sigs/external-dns/blob/master/docs/tutorials/hetzner.md
 
 ## Open Questions
-- Wildcard or per-slug? Recommend wildcard for v1 — simpler, no rate-limit risk, custom domains can be HTTP-01 later.
-- Which DNS provider? Probably Hetzner since infrastructure is already on Hetzner CAX21.
-- What's the SaaS domain? `kai.emai.io`? Decision is platform-branding-level.
+- Hetzner DNS webhook provider: pick the maintained one (cert-manager-webhook-hetzner is the de facto, but check its release cadence before committing).
+- Apex `kai.emai.io` itself (the marketing site, [[TASK-022]]) gets a separate non-wildcard cert; that's standard, just call it out in the deploy doc.
 
 ## Acceptance Criteria
 - [ ] After provisioning, `https://<slug>.kai.example.com` serves a valid cert

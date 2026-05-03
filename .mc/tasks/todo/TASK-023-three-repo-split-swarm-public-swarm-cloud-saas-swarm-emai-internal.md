@@ -43,12 +43,19 @@ Today `swarm` (public) intermingles generic platform code with EmAI-specific ass
 
 One operator codebase, two deployment shapes, no forking.
 
+## Decided
+- **Naming: rename `swarm-config` → `swarm-emai`** (locked in 2026-05-03 — see [[PROP-003]]). One-shot `gh repo rename` + clones / CI / deploy-script updates. Worth the half-hour for years of cleaner symmetry with `swarm-cloud`.
+- **Cluster topology: two clusters** (locked in 2026-05-03 — see [[PROP-003]]). New `kai-cloud` cluster for SaaS; existing `emai-cloud` keeps EmAI internal tenants. ~€15/mo extra; SaaS abuse never affects internal customers.
+- **Trigger to actually split:** wait until [[TASK-016]] (Stripe billing) is integrated. Stripe secrets really should not land in `swarm-config`; that's the natural forcing function. Until then code lives in `swarm` annotated for what will move where.
+- **Coexistence label:** `swarm.io/managed: {internal|saas}` (post-[[TASK-024]]; today `swarm.emai.io/managed`). One operator codebase, two deployment shapes, no forking.
+
 **Phasing:**
-1. Decide naming: keep existing `swarm-config` name (zero churn) or rename to `swarm-emai` for symmetry with `swarm-cloud` (one-shot `gh repo rename`).
-2. Audit `swarm` for EmAI-specific bits — see TASK-024.
-3. Create `swarm-cloud` repo, seed with the bits of current production deploy that don't belong in either of the other two.
-4. Update READMEs in all three to explain the boundary.
-5. CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
+1. Audit `swarm` for EmAI-specific bits — see [[TASK-024]].
+2. Create `swarm-cloud` repo, seed with the bits of current production deploy that don't belong in either of the other two.
+3. `gh repo rename swarm-config swarm-emai`; update CI, deploy scripts, any tooling that hardcodes the name.
+4. Spin up the new `kai-cloud` cluster on Hetzner.
+5. Update READMEs in all three to explain the boundary.
+6. CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
 
 ## References
 - Pattern: GitLab CE/EE/.com — https://about.gitlab.com/install/ce-or-ee/
@@ -61,9 +68,8 @@ One operator codebase, two deployment shapes, no forking.
 - Existing `swarm-config` repo (today's source of EmAI-specific overlay)
 
 ## Open Questions
-- Rename `swarm-config` → `swarm-emai`, or keep the existing name? Renaming is one-shot but churn for tooling/links; keeping is zero-cost.
-- Marketing site (TASK-022): inside `swarm-cloud` or its own `swarm-marketing` repo? Probably `swarm-cloud` for v1; split later if marketing-team access patterns demand it.
-- Single cluster (namespace-separated `internal` vs. `saas`) or two clusters? Two clusters is safer for blast-radius; single cluster is cheaper. Recommend two.
+- Tooling discovery: enumerate every CI / deploy / docs reference to `swarm-config` so the rename PR catches them all. Run before opening the rename PR.
+- Postgres + Resend account creation: when do we provision them? Default: at the same time as `swarm-cloud` repo bootstrap, so the first deploy has a real connection string to wire up.
 
 ## Acceptance Criteria
 - [ ] `swarm-cloud` repo exists, with a working deploy of the public SaaS to a test cluster

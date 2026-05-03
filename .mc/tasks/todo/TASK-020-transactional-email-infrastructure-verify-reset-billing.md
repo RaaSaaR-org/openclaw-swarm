@@ -25,13 +25,17 @@ updated: 2026-05-03
 ## Why
 A SaaS without transactional email is a SaaS that can't onboard users. Required emails: signup verification (TASK-013), password reset, welcome, billing receipts (TASK-016), payment-failed dunning (TASK-016), token-budget warnings (TASK-019), abuse alerts, account deletion confirmation (TASK-021). None of this exists today. Also: deliverability matters — sending from a fresh domain gets you straight to spam without SPF/DKIM/DMARC set up correctly.
 
+## Decided
+- **Provider: Resend** (locked in 2026-05-03), EU region (Frankfurt). Postmark considered for its longer deliverability track record; declined — Resend's DX (react-email templates, modern dashboard, free 3k/mo + cheaper at scale) wins for an early-stage SaaS where template iteration speed > marginal deliverability. Switching cost is one day if we ever outgrow it.
+
 ## What
-- Pick a provider (Postmark, Resend, SES, Mailgun). Recommend **Postmark** for transactional reliability and clean deliverability defaults; **Resend** if dev experience matters more.
-- Build a small `email` package in the shared module (see TASK-004): `Send(template, to, data)` interface, with templates as Go embedded files.
-- Author templates: `verify`, `reset`, `welcome`, `billing-receipt`, `payment-failed`, `usage-warning`, `account-deleted`. German + English (CLAUDE.md: German is primary).
-- DNS setup: SPF, DKIM, DMARC for the sending domain. Document in `docs/deployment-guide.md`.
-- Webhook receivers for delivery/bounce/complaint events from the provider — track per-user delivery health, mark hard-bouncing addresses.
-- Local dev: log emails to disk instead of actually sending (controlled by env var).
+- Build a small `pkg/email/` module (sibling of `pkg/auth/` — same multi-module pattern from TASK-004). Public API: `Send(ctx, template, to, data) error` — pure data in, no HTTP leaks.
+- Templates authored with `react-email` (TypeScript) and pre-rendered into Go `embed.FS` at build time, OR keep them as Go `text/template` if we want to avoid a JS step in the email package. Decision deferred until first template is implemented.
+- Templates: `verify`, `reset`, `welcome`, `billing-receipt`, `payment-failed`, `usage-warning`, `account-deleted`. German + English (CLAUDE.md: German is primary). User language preference stored on the User record (TASK-014); defaulted from browser `Accept-Language` at signup.
+- DNS setup: SPF, DKIM, DMARC for the sending domain. Document in `docs/deployment-guide.md`. Target ≥9/10 on https://www.mail-tester.com/.
+- Resend webhook receiver in `web/onboarding/server` (or a new `web/billing/server` if billing webhooks land there too) for `email.delivered` / `email.bounced` / `email.complained` events — mark hard-bouncing addresses on the User record so we stop emailing them.
+- Local dev: `EMAIL_PROVIDER=disk` writes rendered emails to `/tmp/emai-emails/` instead of sending; `EMAIL_PROVIDER=resend` uses the real API.
+- Reply-to: send-only (`noreply@`) for v1; reply handling routed to support is its own task.
 
 ## References
 - Postmark: https://postmarkapp.com/  | Pricing: https://postmarkapp.com/pricing
@@ -43,9 +47,8 @@ A SaaS without transactional email is a SaaS that can't onboard users. Required 
 - TASK-021 (deletion confirmation email)
 
 ## Open Questions
-- Postmark vs Resend? Postmark = mature + reliable; Resend = better DX + cheaper at low volume.
-- Bilingual templates: where does language preference live? On User record, defaulted from browser `Accept-Language` at signup.
-- Reply-to: do we accept replies (and route them to support) or send-only (`noreply@`)? Send-only is simpler v1.
+- Template engine: Go `text/template` (no JS step, less DX polish) vs `react-email` pre-rendered to `embed.FS` (slick templates, requires Node in build). Decide on first template.
+- Sending domain: subdomain of the marketing domain (e.g. `mail.kai.example.com`) or apex (`kai.example.com`)? Subdomain is conventional — keeps marketing domain reputation isolated.
 
 ## Acceptance Criteria
 - [ ] Email send works end-to-end against the chosen provider in staging

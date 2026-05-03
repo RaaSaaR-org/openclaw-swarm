@@ -23,9 +23,14 @@ updated: 2026-05-03
 # SaaS marketing landing + pricing page (separate from NeoDEM landing)
 
 ## Why
-A SaaS needs a public face — value prop, screenshots, demo, app catalog (TASK-018), pricing tiers, signup CTA. The existing `landing-page/` repo (sibling to swarm) is the **NeoDEM** marketing site (robot fleet management product), which is a completely different product for a completely different audience. Reusing it would confuse both audiences. The OpenClaw SaaS needs its own landing site, ideally on a clean domain (e.g. `kai.emai.io` or similar — see TASK-017 for DNS topology).
+A SaaS needs a public face — value prop, screenshots, demo, app catalog (TASK-018), pricing tiers, signup CTA. The existing `landing-page/` repo (sibling to swarm) is the **NeoDEM** marketing site (robot fleet management product), which is a completely different product for a completely different audience. Reusing it would confuse both audiences. The OpenClaw SaaS needs its own landing site.
 
-> **Repo split (TASK-023):** marketing site lives in **`swarm-cloud/`** (or as a sibling `swarm-marketing/` repo if the marketing team needs separate access). It does **not** live in public `swarm` — the public repo doesn't ship product copy, brand colours, or pricing. The site reads `agents/catalog/` from a pinned `swarm` release tag (vendored at build time) so it doesn't drift from the deployed catalog.
+## Decided
+- **Domain: `kai.emai.io`** (locked in 2026-05-03). Subdomain of EmAI's existing brand — no new domain to register, reuses brand trust. Standalone domain (e.g. `getkai.io`) considered for v1 brand independence; rejected — migrating to a standalone domain later is a 301 redirect away if/when the product warrants its own brand.
+- **Repo: inside `swarm-cloud/web/marketing/`** (locked in 2026-05-03 — see [[PROP-003]] for the three-repo split). Separate `swarm-marketing/` repo considered; deferred until marketing-team access patterns demand it (when the marketing person isn't also the platform engineer).
+- **Stack: Astro** (per the original task). Fast, SEO-friendly, minimal JS, supports component islands.
+
+> The site reads `agents/catalog/` from a pinned `swarm` release tag (vendored at build time) so it doesn't drift from the deployed catalog.
 
 ## What
 - New repo or new directory in this repo: `web/marketing/` (Next.js? Astro? Slidev? plain HTML?). **Recommend Astro** — fast, SEO-friendly, minimal JS, supports component islands when needed.
@@ -51,9 +56,8 @@ A SaaS needs a public face — value prop, screenshots, demo, app catalog (TASK-
 - TASK-017 (DNS — decide the marketing domain)
 
 ## Open Questions
-- Domain? `kai.emai.io`, standalone like `getkai.io`, or on `openclaw.ai`?
-- Inside `swarm-cloud/` or its own `swarm-marketing/` repo? Default: inside `swarm-cloud/web/marketing/` for v1; split out only when marketing-team access patterns demand it.
-- Do we want a hosted demo agent (try-before-signup) or just a video?
+- Hosted demo agent (try-before-signup) or just a video? Default: video for v1; hosted demo is a great hook but takes a dedicated abuse story (anon CAPTCHA, hard rate limit, separate pooled key with tiny budget).
+- Hosting: Cloudflare Pages (free, global edge, easy deploy) vs Vercel (better Astro integration but vendor lock-in)? Default: Cloudflare Pages — own DNS at Hetzner, Cloudflare Pages can serve from any DNS.
 
 ## Acceptance Criteria
 - [ ] Live marketing site at chosen domain with: home, apps, pricing, privacy, terms, imprint

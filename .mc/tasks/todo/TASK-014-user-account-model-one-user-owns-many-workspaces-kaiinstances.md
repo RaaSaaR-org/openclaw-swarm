@@ -30,11 +30,21 @@ The current model is "1 customerSlug = 1 KaiInstance" — there is **no concept 
 >
 > **Terminology (TASK-024):** "customerSlug" → "tenantSlug" / "workspaceSlug"; the `swarm.emai.io/...` label group becomes `swarm.io/...`; `customer-center` web app gets renamed to `center` or `dashboard`.
 
+## Decided
+- **Storage: Postgres** (locked in 2026-05-03 — see [[PROP-001]] for full rationale). One `users` table in a managed Postgres in `swarm-cloud/`. Etcd considered (`SwarmUser` CRD); rejected because Postgres scales beyond etcd's ~10k object ceiling and supports indexed lookup on email.
+- **CRD field:** add `spec.userRef` to `KaiInstance` (string — Postgres `users.id`). Required for `managed: saas` instances; null for `managed: internal` (per [[PROP-003]]).
+- **Workspaces per user:** unlimited at all tiers — quota lives at the workspace level (per [[TASK-015]]), not at user level. Free tier still capped at 1 workspace per user as part of the per-tier quota schema.
+- **Shared workspaces (team on one assistant):** out of scope for v1.
+
 ## What
-- Decide where User lives: a new CRD (`SwarmUser`), a separate Postgres-backed user service, or just a K8s Secret per user. CRD is the most consistent with the rest of the platform; Postgres is more conventional for user accounts.
-- Add `spec.userRef` (or label `swarm.io/user-id` once TASK-024 renames the API group; today's group is `swarm.emai.io`) to `KaiInstance` so we can list "all instances belonging to user X".
-- Customer-center grows a "your workspaces" view + a "create new workspace" action.
-- Migration: existing customers in `swarm-config/` need to be associated with a synthetic admin user (or kept as untenanted "platform-managed").
+- Provision Postgres in `swarm-cloud/` (managed Hetzner Postgres or Neon; ~€10/mo to start). Schema in [[PROP-001]].
+- Add a small `pkg/users/` Go module (sibling of `pkg/auth/` — same multi-module pattern from TASK-004) that wraps the Postgres queries: `Create(email, hash, tier, language)`, `GetByEmail`, `GetByID`, `UpdateTier`, `SoftDelete(id)`.
+- Update `KaiInstance` CRD ([[TASK-012]]'s v1alpha2) with `spec.userRef` + `spec.managed`.
+- Customer-center:
+  - On login, look up the user in Postgres (via `pkg/users`), not the per-tenant Secret.
+  - Add a "your workspaces" view backed by `kubectl get kaiinstance -l swarm.io/user-id=<id>`.
+  - Add "create new workspace" → calls onboarding API with `userRef` = current user.
+- Migration: existing customers in `swarm-emai`/`swarm-config` get `managed: internal` and no `userRef` (the synthetic-admin-user idea was rejected; cleaner to keep them entirely outside the User table).
 
 ## References
 - `/Users/heussers/develop/emai/swarm/operator/api/v1alpha1/kaiinstance_types.go` (current CRD has no userRef)
@@ -43,9 +53,9 @@ The current model is "1 customerSlug = 1 KaiInstance" — there is **no concept 
 - TASK-012 (CRD evolution proposal — User design must be in the same proposal)
 
 ## Open Questions
-- CRD or Postgres for User? CRD = consistent platform; Postgres = conventional for billing/email/audit.
-- One workspace per user (free) and many on paid tiers, or always many?
-- How do shared workspaces work (a team of users on one assistant)? Out of scope for v1?
+- Managed Postgres provider for `swarm-cloud`: Hetzner Cloud Postgres (German region, lower latency), Neon (serverless, cheaper at low volume), or Supabase (auth + Postgres bundled, but we already have pkg/auth)? Default: Hetzner Postgres for region + ops simplicity.
+- ID shape: ULIDs (lexicographic-sortable, time-prefixed) vs UUIDv7 (similar) vs Stripe-style `usr_<random>`. Default: ULIDs prefixed `u_`.
+- Email-verification gate: `email_verified_at` IS NULL → block login? Or just gate provisioning of new workspaces? Default: block login until verified.
 
 ## Acceptance Criteria
 - [ ] User entity exists somewhere (CRD or DB) with stable ID, email, created-at, tier, deleted-at
