@@ -4,7 +4,7 @@ aliases:
 - TASK-007
 title: Refresh CONTRIBUTING.md and customer-onboarding.md (stale targets, renamed UI)
 slug: refresh-contributing-md-and-customer-onboarding-md-stale-targets-renamed-ui
-status: backlog
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -17,6 +17,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Refresh CONTRIBUTING.md and customer-onboarding.md (stale targets, renamed UI)

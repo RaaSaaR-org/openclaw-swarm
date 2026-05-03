@@ -35,16 +35,22 @@
 ## Initial Setup
 
 - [ ] Access the customer agent via one of:
-  - **Customer Center:** `https://<host>/center/<slug>` — sign in with email + password (first visit creates the admin account).
-  - **Web Chat:** `https://<host>/chat/<slug>` — same sign-in. Backed by the per-customer `kai-<slug>-users` Secret.
-  - **Telegram:** Via dedicated bot (if configured)
+  - **Customer Center:** `https://<host>/center/<slug>` — first visit triggers
+    the bootstrap-admin flow: the email + password the first visitor submits
+    becomes the admin account, written into the `kai-<slug>-users` Secret.
+    Subsequent visits use the normal login form.
+  - **Web Chat:** `https://<host>/chat/<slug>` — same sign-in. Reads from the
+    same `kai-<slug>-users` Secret as Customer Center.
+  - **Telegram:** Via dedicated bot (if configured).
 - [ ] Send test message to verify agent responds correctly
 - [ ] Verify isolation: ask about other customers — agent should refuse
 
 ## Handoff to Customer
 
-- [ ] Share the Customer Center link: `https://<host>/center/<slug>` — first visit creates the customer admin account.
-- [ ] Walk the customer through adding their team in the Team Access panel; they share initial passwords with each user out-of-band.
+- [ ] Share the Customer Center link: `https://<host>/center/<slug>` — first
+      visit creates the customer admin account (bootstrap-admin flow above).
+- [ ] Walk the customer through adding their team on the **Team** page; they
+      share initial passwords with each user out-of-band.
 - [ ] Optionally share Telegram bot link
 - [ ] Brief walkthrough: what the agent can do (project tracking, tasks, meetings, status reports)
 - [ ] Set expectations: agent scope, available tools, escalation path
@@ -67,6 +73,24 @@ swarm-ctl resume <slug>    # Scale back to 1
 ## Offboarding
 
 - [ ] Delete instance: `swarm-ctl delete <slug>`
-- [ ] All child resources (Deployment, Service, PVC, ConfigMap, NetworkPolicy) are automatically cleaned up via Kubernetes ownerReferences
+- [ ] All child resources (Deployment, Service, PVC, ConfigMap, NetworkPolicy,
+      `kai-<slug>-users` Secret, `kai-<slug>-chat-bridge` Secret) are
+      automatically cleaned up via Kubernetes ownerReferences
 - [ ] For Docker Compose: `./scripts/teardown-customer.sh <slug>` (archives data before removal)
 - [ ] Confirm customer data fully removed from running infrastructure
+
+## Web App Reference
+
+The platform exposes several web surfaces — pick the right one for the task:
+
+| App | URL | Audience | Purpose |
+|---|---|---|---|
+| **Customer Center** | `https://<host>/center/<slug>` | Tenant admin | Sign in, manage Team, see briefings |
+| **Customer Chat** | `https://<host>/chat/<slug>` | Tenant user | Chat with the Kai agent |
+| **Admin Console** | `https://<host>/admin/` | Platform operator | List / suspend / resume KaiInstances (ADMIN_TOKEN auth today) |
+| **Status Page** | `https://<host>/status/<slug>` | Anyone with the token | Public per-tenant status (Bearer or `?token=` query) |
+| **Onboarding API** | `POST https://<host>/api/instances` | Platform operator | Provision a new KaiInstance (ADMIN_TOKEN auth today) |
+
+Onboarding-API + Admin-Console currently run on a single shared `ADMIN_TOKEN`;
+self-serve signup with per-user accounts is tracked under the SaaS work in
+`.mc/`.
