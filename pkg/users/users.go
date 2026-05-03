@@ -46,6 +46,7 @@ type User struct {
 	Tier             Tier
 	StripeCustomerID string     // empty until first checkout
 	Language         Lang
+	App              string     // catalog persona slug picked at signup; default DefaultApp
 	CreatedAt        time.Time
 	EmailVerifiedAt  *time.Time // nil until verify-email link clicked
 	DeletedAt        *time.Time // nil = active; non-nil = within GDPR grace window
@@ -59,7 +60,13 @@ type CreateParams struct {
 	PasswordHash string
 	Tier         Tier
 	Language     Lang
+	App          string // optional; falls back to DefaultApp when empty
 }
+
+// DefaultApp is the persona a brand-new SaaS workspace ships with when the
+// signup form didn't carry an `app` field. Matches one of the slugs in
+// `agents/catalog/<slug>/`.
+const DefaultApp = "personal-assistant"
 
 // Store is what callers depend on. Implementations must be safe for
 // concurrent use. Email lookups are case-insensitive (we store lower-cased).
@@ -88,6 +95,7 @@ var (
 	ErrInvalidEmail  = errors.New("users: invalid email")
 	ErrInvalidTier   = errors.New("users: invalid tier")
 	ErrInvalidLang   = errors.New("users: invalid language")
+	ErrInvalidApp    = errors.New("users: invalid app slug")
 	ErrEmptyHash     = errors.New("users: password hash required")
 	ErrAlreadyDeleted = errors.New("users: already soft-deleted")
 )
@@ -111,4 +119,28 @@ func ValidTier(t Tier) bool {
 // ValidLang reports whether l is one of the supported preference codes.
 func ValidLang(l Lang) bool {
 	return l == LangDE || l == LangEN
+}
+
+// ValidApp reports whether s is a syntactically-valid catalog app slug:
+// DNS-safe, 1-63 chars, lowercase letters / digits / hyphens, starts and
+// ends alphanumeric. Empty strings are NOT valid here — callers either
+// pass a slug or pass DefaultApp; pkg/users doesn't substitute.
+//
+// Existence-of-app validation (does `agents/catalog/<slug>` actually exist?)
+// stays at the consumer layer — the catalog is shipped by the swarm repo,
+// not pkg/users.
+func ValidApp(s string) bool {
+	if len(s) == 0 || len(s) > 63 {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-' && i != 0 && i != len(s)-1:
+		default:
+			return false
+		}
+	}
+	return true
 }

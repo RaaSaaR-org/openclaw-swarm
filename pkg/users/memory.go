@@ -42,6 +42,13 @@ func (s *MemoryStore) Create(_ context.Context, p CreateParams) (*User, error) {
 	if !ValidLang(p.Language) {
 		return nil, ErrInvalidLang
 	}
+	app := p.App
+	if app == "" {
+		app = DefaultApp
+	}
+	if !ValidApp(app) {
+		return nil, ErrInvalidApp
+	}
 	id, err := NewID()
 	if err != nil {
 		return nil, err
@@ -59,6 +66,7 @@ func (s *MemoryStore) Create(_ context.Context, p CreateParams) (*User, error) {
 		PasswordHash: p.PasswordHash,
 		Tier:         p.Tier,
 		Language:     p.Language,
+		App:          app,
 		CreatedAt:    s.clock().UTC(),
 	}
 	s.byID[id] = u

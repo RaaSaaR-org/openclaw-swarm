@@ -290,6 +290,57 @@ func TestHandleVerifyWithoutDynClientStillVerifies(t *testing.T) {
 	}
 }
 
+func TestHandleSignupAppFieldThreadsThroughToKaiInstance(t *testing.T) {
+	t.Parallel()
+	s, cap := newSignupServer(t)
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse","app":"writing-coach"}`))
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("signup: expected 202, got %d", rr.Code)
+	}
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id, tok := parsed.Query().Get("id"), parsed.Query().Get("token")
+
+	// Sanity: User row carries the picked app.
+	u, _ := s.users.GetByID(context.Background(), id)
+	if u.App != "writing-coach" {
+		t.Errorf("user.App = %q, want writing-coach", u.App)
+	}
+
+	rr = httptest.NewRecorder()
+	s.handleVerify(rr, httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("verify: expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	wantSlug := slugFromUserID(id)
+	got, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Get(context.Background(), "kai-"+wantSlug, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("KaiInstance not provisioned: %v", err)
+	}
+	spec := got.Object["spec"].(map[string]any)
+	if spec["appRef"] != "writing-coach" {
+		t.Errorf("spec.appRef = %v, want writing-coach", spec["appRef"])
+	}
+	labels := got.Object["metadata"].(map[string]any)["labels"].(map[string]any)
+	if labels["swarm.io/app"] != "writing-coach" {
+		t.Errorf("swarm.io/app label = %v, want writing-coach", labels["swarm.io/app"])
+	}
+}
+
+func TestHandleSignupBadAppReturns400(t *testing.T) {
+	t.Parallel()
+	s, _ := newSignupServer(t)
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse","app":"BAD App!"}`))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on bad app slug, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "DNS-safe") {
+		t.Errorf("error must mention DNS-safe, got %s", rr.Body.String())
+	}
+}
+
 func TestHandleVerifyRefuses402WhenTierCapReached(t *testing.T) {
 	t.Parallel()
 	s, cap := newSignupServer(t)

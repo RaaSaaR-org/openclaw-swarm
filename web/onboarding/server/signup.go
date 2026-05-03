@@ -60,6 +60,7 @@ type signupRequest struct {
 	Email        string `json:"email"`
 	Password     string `json:"password"`
 	Language     string `json:"language,omitempty"`     // de | en; defaults to de per CLAUDE.md
+	App          string `json:"app,omitempty"`          // catalog persona slug; defaults to users.DefaultApp
 	CaptchaToken string `json:"captchaToken,omitempty"` // forwarded to the captcha verifier
 }
 
@@ -120,6 +121,13 @@ func (s *server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	if req.Language == string(users.LangEN) {
 		lang = users.LangEN
 	}
+	// App selection (TASK-013 Phase 1.B). Empty falls back to users.DefaultApp
+	// inside the store. Reject malformed slugs early with a 400 so the SPA
+	// can show a useful error before the user submits the form again.
+	if req.App != "" && !users.ValidApp(req.App) {
+		writeErr(w, http.StatusBadRequest, errors.New("app must be a DNS-safe slug (lowercase, digits, hyphens; ≤63 chars)"))
+		return
+	}
 
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -127,7 +135,7 @@ func (s *server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := s.users.Create(r.Context(), users.CreateParams{
-		Email: req.Email, PasswordHash: hash, Tier: users.TierFree, Language: lang,
+		Email: req.Email, PasswordHash: hash, Tier: users.TierFree, Language: lang, App: req.App,
 	})
 	if err != nil {
 		// Uniform 202 on duplicate-email so probing doesn't enumerate accounts.
@@ -278,10 +286,11 @@ func (s *server) countWorkspacesForUser(ctx context.Context, userID string) (int
 	return len(list.Items), nil
 }
 
-// defaultSignupApp is the persona a brand-new SaaS workspace ships with
-// when the user didn't pick one at signup. Phase 1.B will let signup carry
-// an `app` field and store it on the User row.
-const defaultSignupApp = "personal-assistant"
+// defaultSignupApp is the safety fallback when a User row somehow lacks an
+// app (legacy rows pre-Phase-1.B, or test fixtures). Phase 1.B threads the
+// signup-form `app` field onto the User row, so production paths now read
+// from u.App; this const stays as a defense-in-depth default.
+const defaultSignupApp = users.DefaultApp
 
 // slugFromUserID derives a DNS-safe slug from a User ID (`u_<26-char ULID>`).
 // Strips the `u_` prefix, lowercases, takes the first 12 chars of the ULID
@@ -309,6 +318,10 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 	if tier == "" {
 		tier = string(users.TierFree)
 	}
+	app := u.App
+	if app == "" {
+		app = defaultSignupApp
+	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "swarm.emai.io/v1alpha1",
 		"kind":       "KaiInstance",
@@ -320,7 +333,7 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 				"swarm.io/user-id": u.ID,
 				"swarm.io/tier":    tier,
 				"swarm.io/managed": "saas",
-				"swarm.io/app":     defaultSignupApp,
+				"swarm.io/app":     app,
 			},
 			"annotations": map[string]any{
 				"swarm.io/created-by": "onboarding-signup",
@@ -336,7 +349,7 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 			"tier":     tier,
 			"userRef":  u.ID,
 			"managed":  "saas",
-			"appRef":   defaultSignupApp,
+			"appRef":   app,
 			"gatewayAuth": map[string]any{
 				"mode":  "token",
 				"token": gatewayToken,

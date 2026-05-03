@@ -170,6 +170,62 @@ func TestMemoryStoreSoftDelete(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreCreateAppDefaultAndOverride(t *testing.T) {
+	t.Parallel()
+	s := NewMemoryStore()
+	// Empty App falls back to DefaultApp.
+	u, err := s.Create(context.Background(), newCreate())
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if u.App != DefaultApp {
+		t.Errorf("default App = %q, want %q", u.App, DefaultApp)
+	}
+
+	// Explicit App is honored when valid.
+	p := newCreate()
+	p.Email = "bob@example.org"
+	p.App = "coding-helper"
+	u2, err := s.Create(context.Background(), p)
+	if err != nil {
+		t.Fatalf("Create with App: %v", err)
+	}
+	if u2.App != "coding-helper" {
+		t.Errorf("explicit App = %q, want coding-helper", u2.App)
+	}
+
+	// Bad slug is rejected.
+	p3 := newCreate()
+	p3.Email = "carol@example.org"
+	p3.App = "Bad App!"
+	_, err = s.Create(context.Background(), p3)
+	if !errors.Is(err, ErrInvalidApp) {
+		t.Errorf("expected ErrInvalidApp, got %v", err)
+	}
+}
+
+func TestValidApp(t *testing.T) {
+	t.Parallel()
+	for _, ok := range []string{"a", "personal-assistant", "coding-helper", "x-y-z", "abc123"} {
+		if !ValidApp(ok) {
+			t.Errorf("%q must be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "Personal-Assistant", "-leading", "trailing-", "has space", "with_underscore", "Hello"} {
+		if ValidApp(bad) {
+			t.Errorf("%q must NOT be valid", bad)
+		}
+	}
+	// 64 chars is over the cap.
+	if ValidApp(strings.Repeat("a", 64)) {
+		t.Error("64-char slug must be rejected")
+	}
+	// 63 chars is fine.
+	if !ValidApp(strings.Repeat("a", 63)) {
+		t.Error("63-char slug must be accepted")
+	}
+}
+
 func TestMemoryStoreCloneIsolation(t *testing.T) {
 	t.Parallel()
 	s := NewMemoryStore()
