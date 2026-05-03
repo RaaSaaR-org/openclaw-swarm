@@ -4,7 +4,7 @@ aliases:
 - TASK-024
 title: 'De-EmAI-ify public swarm: rename customer→tenant, drop emai.io API group'
 slug: de-emai-ify-public-swarm-rename-customer-tenant-drop-emai-io-api-group
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # De-EmAI-ify public swarm: rename customer→tenant, drop emai.io API group
@@ -73,12 +74,24 @@ This is the hygiene work that has to land before TASK-023 (three-repo split) can
 - "Tenant" or "Workspace" as the primary term for the K8s resource? Recommend **tenant** in K8s/operator code, **workspace** in product UI (impl term vs. product noun).
 - Keep `kai-` prefix on auto-generated K8s resource names? Yes — generic and grep-friendly.
 
+## Status
+
+**Phase 1.A (additive K8s label) — done** on 2026-05-03. Operator-rendered child resources now carry `swarm.io/tenant=<slug>` alongside the legacy `emai.io/customer=<slug>`. New tooling can already select on the generic label; existing NetworkPolicy podSelectors and any kubectl filters in `swarm-emai`/`swarm-config` keep working unchanged. Test in `resources_test.go::TestCommonLabelsCarriesBothLegacyAndNewTenantLabel` asserts the contract so the legacy label can't accidentally disappear before the v1alpha2 bump.
+
+**Remaining phases:**
+- Phase 1.B (docs sweep): rewrite `docs/`, `README.md`, `CONTRIBUTING.md` references to "customer" that aren't literal API-contract names. Standalone, can ship anytime.
+- Phase 2 (CRD additive — `spec.tenantSlug`/`tenantName` alongside `customerSlug`/`customerName`; operator accepts either): bundle with [[TASK-012]] v1alpha2 work.
+- Phase 3 (`swarm-emai` / `swarm-config` mass rewrite): private-repo work, blocked on Phase 2.
+- Phase 4 (web app dir rename `customer-chat` → `chat`, `customer-center` → `center`): one-shot `git mv` + Dockerfile + CI matrix + image-name + K8s manifest update. Coordinated with a deploy because image names change.
+- Phase 5 (CRD API group `swarm.emai.io` → `swarm.io`): conversion webhook for one minor version, every YAML in every overlay updated. Bundle with [[TASK-012]].
+
 ## Acceptance Criteria
 - [ ] No file path, identifier, label, or CRD field in public `swarm` contains the literal word "customer" (verified by `grep -rn "customer" --exclude-dir=node_modules`)
 - [ ] CRD API group renamed; conversion webhook handles old-style manifests for one minor version
 - [ ] `swarm-emai` / `swarm-config` updated to use the new field/label/dir names
 - [ ] Docs and READMEs updated; no surviving "customer" references in public-repo docs
 - [ ] Existing internal tenants continue to reconcile correctly throughout the migration
+- [x] Phase 1.A: additive `swarm.io/tenant=<slug>` label rendered on every operator-managed child resource (2026-05-03)
 
 ## Notes
 **This is the largest single rename in the project's history.** Bundle with TASK-012 (v1alpha1→v1alpha2 CRD migration) rather than doing two back-to-back. Land TASK-023 conceptually first (so the boundary makes sense), do this one as the actual code change.

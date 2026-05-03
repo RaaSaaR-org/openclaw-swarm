@@ -37,6 +37,13 @@ const (
 )
 
 // commonLabels returns the standard labels for a KaiInstance's child resources.
+//
+// The two label groups (`emai.io/*` and `swarm.io/*`) coexist intentionally
+// during the TASK-024 rename: existing selectors (NetworkPolicy podSelector,
+// ad-hoc kubectl filters in swarm-emai/swarm-config) still match the legacy
+// labels, while new tooling can already select on the generic
+// `swarm.io/tenant=<slug>` label that's not tied to EmAI's domain. The legacy
+// labels are dropped together with the v1alpha1→v1alpha2 CRD bump (TASK-012).
 func commonLabels(slug string) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "kai-" + slug,
@@ -45,6 +52,7 @@ func commonLabels(slug string) map[string]string {
 		"emai.io/component":            "agent",
 		"emai.io/role":                 "customer",
 		"emai.io/customer":             slug,
+		"swarm.io/tenant":              slug,
 	}
 }
 

@@ -246,6 +246,21 @@ func TestBuildDeploymentTelegram(t *testing.T) {
 	}
 }
 
+func TestCommonLabelsCarriesBothLegacyAndNewTenantLabel(t *testing.T) {
+	t.Parallel()
+	got := commonLabels("acme")
+	// Legacy label must remain so existing NetworkPolicy podSelector and any
+	// kubectl filters in swarm-emai/swarm-config keep working until the
+	// v1alpha2 CRD bump (TASK-012) flips them in lockstep.
+	if got["emai.io/customer"] != "acme" {
+		t.Errorf("emai.io/customer = %q, want acme (legacy label must survive Phase 1)", got["emai.io/customer"])
+	}
+	// New label is what generic / forked tooling should select on going forward.
+	if got["swarm.io/tenant"] != "acme" {
+		t.Errorf("swarm.io/tenant = %q, want acme (additive new label)", got["swarm.io/tenant"])
+	}
+}
+
 func TestBuildDeploymentOpenRouterDefaultPerSlugSecret(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
