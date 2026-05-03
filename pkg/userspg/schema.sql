@@ -24,6 +24,20 @@ CREATE TABLE IF NOT EXISTS users (
 -- ALTER TABLE ADD COLUMN.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS app TEXT NOT NULL DEFAULT 'personal-assistant';
 
+-- deletion_audit (TASK-021 Phase 5): records every soft-delete + the
+-- subsequent hard-purge timestamp without storing PII. Lets us answer
+-- "did we delete user X?" — required for GDPR legal audits — without
+-- holding onto the user ID itself.
+--
+-- The id_hash is SHA-256 of the original user ID. The original ID is
+-- gone after PurgeDeletedBefore runs; the hash survives forever.
+CREATE TABLE IF NOT EXISTS deletion_audit (
+    id_hash     TEXT        PRIMARY KEY,
+    deleted_at  TIMESTAMPTZ NOT NULL,
+    purged_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS deletion_audit_deleted_at_idx ON deletion_audit (deleted_at);
+
 -- Unique on lower(email) for active rows only — soft-deleted users free up
 -- their email address so a new signup can reuse it during the grace window.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_active_idx

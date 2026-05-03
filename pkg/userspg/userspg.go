@@ -6,7 +6,9 @@ package userspg
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -204,22 +206,119 @@ func (s *PoolStore) SoftDelete(ctx context.Context, id string, at time.Time) err
 	if !exists {
 		return users.ErrNotFound
 	}
-	_, err := s.Pool.Exec(ctx, `UPDATE users SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL`, at.UTC(), id)
-	return err
+	// Audit log (TASK-021 Phase 5): record the deletion timestamp keyed
+	// by sha256(id) so we can answer "did we delete user X?" later
+	// without storing the user ID. Same transaction as the UPDATE so the
+	// audit row and the soft-delete are atomic — never one without the
+	// other. ON CONFLICT covers the soft-delete-after-purge re-creation
+	// edge case (user signs up again with a fresh ID that hashes the same
+	// — astronomically unlikely but defended against).
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `UPDATE users SET deleted_at = $1 WHERE id = $2 AND deleted_at IS NULL`, at.UTC(), id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO deletion_audit (id_hash, deleted_at) VALUES ($1, $2)
+		 ON CONFLICT (id_hash) DO UPDATE SET deleted_at = EXCLUDED.deleted_at`,
+		hashUserID(id), at.UTC(),
+	); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // PurgeDeletedBefore hard-deletes every soft-deleted user older than the
 // cutoff. The GDPR cron (TASK-021 Phase 2) calls this with
-// `time.Now().Add(-users.GracePeriod)` once a day.
+// `time.Now().Add(-users.GracePeriod)` once a day. Atomically updates the
+// audit log's `purged_at` for the affected rows so the audit row survives
+// the hard-delete and a future "when did we purge user X?" query can be
+// answered.
 func (s *PoolStore) PurgeDeletedBefore(ctx context.Context, before time.Time) (int, error) {
-	tag, err := s.Pool.Exec(ctx,
-		`DELETE FROM users WHERE deleted_at IS NOT NULL AND deleted_at < $1`,
-		before.UTC(),
-	)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
+	defer tx.Rollback(ctx)
+	// Capture the IDs about to be purged so we can hash them for the
+	// audit-log update. After DELETE the IDs are gone.
+	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE deleted_at IS NOT NULL AND deleted_at < $1`, before.UTC())
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, tx.Commit(ctx)
+	}
+	now := time.Now().UTC()
+	for _, id := range ids {
+		if _, err := tx.Exec(ctx,
+			`UPDATE deletion_audit SET purged_at = $1 WHERE id_hash = $2`,
+			now, hashUserID(id),
+		); err != nil {
+			return 0, err
+		}
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE deleted_at IS NOT NULL AND deleted_at < $1`, before.UTC())
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
 	return int(tag.RowsAffected()), nil
+}
+
+// DeletionAudit is the audit-log shape returned by LookupDeletion. PurgedAt
+// is nil when the row has been soft-deleted but not yet hard-purged (still
+// within the grace window).
+type DeletionAudit struct {
+	IDHash    string
+	DeletedAt time.Time
+	PurgedAt  *time.Time
+}
+
+// LookupDeletion answers "was this user ID ever deleted?" without holding
+// onto the user ID itself in the audit table. Pass the original `u_<ulid>`
+// — we hash inside. Returns nil + nil when no record exists. Used by legal
+// audits ("court asks: did you delete user X on date Y?").
+func (s *PoolStore) LookupDeletion(ctx context.Context, userID string) (*DeletionAudit, error) {
+	const q = `SELECT id_hash, deleted_at, purged_at FROM deletion_audit WHERE id_hash = $1`
+	var a DeletionAudit
+	err := s.Pool.QueryRow(ctx, q, hashUserID(userID)).Scan(&a.IDHash, &a.DeletedAt, &a.PurgedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// hashUserID returns the SHA-256 hex digest of a user ID. Stable across
+// process restarts (no salt) — the audit-log lookup needs to find the same
+// hash for the same ID later, so a salt would defeat the purpose. The
+// information leak is "the audit log can be enumerated by anyone with a
+// candidate user ID", which is the trade-off for being able to answer
+// legal-audit queries at all.
+func hashUserID(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:])
 }
 
 // scanUser knows the exact column order returned by every Get/Insert query

@@ -218,6 +218,83 @@ func TestPoolStorePurgeDeletedBefore(t *testing.T) {
 	}
 }
 
+func TestPoolStoreDeletionAuditFlow(t *testing.T) {
+	pool := newTestPool(t)
+	s, _ := New(pool)
+	ctx := context.Background()
+
+	u, _ := s.Create(ctx, users.CreateParams{
+		Email: "doomed@x.de", PasswordHash: "$argon2id$x", Tier: users.TierFree, Language: users.LangDE,
+	})
+
+	// Before deletion: no audit row.
+	got, err := s.LookupDeletion(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("LookupDeletion (pre): %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil audit before deletion, got %+v", got)
+	}
+
+	// Soft-delete: audit row appears with deleted_at set, purged_at nil.
+	deleteTime := time.Now().UTC().Truncate(time.Second).Add(-2 * users.GracePeriod)
+	if err := s.SoftDelete(ctx, u.ID, deleteTime); err != nil {
+		t.Fatalf("SoftDelete: %v", err)
+	}
+	got, err = s.LookupDeletion(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("LookupDeletion (after soft): %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected audit row after soft-delete")
+	}
+	if !got.DeletedAt.Equal(deleteTime) {
+		t.Errorf("DeletedAt = %v, want %v", got.DeletedAt, deleteTime)
+	}
+	if got.PurgedAt != nil {
+		t.Errorf("PurgedAt should be nil before purge, got %v", got.PurgedAt)
+	}
+	// id_hash is the SHA-256 hex of the user ID — 64 chars, never matches the ID itself.
+	if len(got.IDHash) != 64 {
+		t.Errorf("id_hash should be 64 hex chars, got %d", len(got.IDHash))
+	}
+	if got.IDHash == u.ID {
+		t.Error("id_hash must NOT equal the original user ID")
+	}
+
+	// Hard-purge: audit row's purged_at gets set; user row gone.
+	if _, err := s.PurgeDeletedBefore(ctx, time.Now()); err != nil {
+		t.Fatalf("PurgeDeletedBefore: %v", err)
+	}
+	got, err = s.LookupDeletion(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("LookupDeletion (after purge): %v", err)
+	}
+	if got == nil {
+		t.Fatal("audit row must survive the hard-purge")
+	}
+	if got.PurgedAt == nil {
+		t.Error("PurgedAt must be set after PurgeDeletedBefore")
+	}
+
+	// User row is gone — but the audit answers "yes we deleted them, here's when".
+	if _, err := s.GetByID(ctx, u.ID); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("user row must be gone after purge, got %v", err)
+	}
+}
+
+func TestPoolStoreLookupDeletionUnknownIDReturnsNil(t *testing.T) {
+	pool := newTestPool(t)
+	s, _ := New(pool)
+	got, err := s.LookupDeletion(context.Background(), "u_never_existed")
+	if err != nil {
+		t.Fatalf("LookupDeletion: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil for unknown ID, got %+v", got)
+	}
+}
+
 func TestPoolStoreNewRejectsNilPool(t *testing.T) {
 	t.Parallel()
 	if _, err := New(nil); err == nil {

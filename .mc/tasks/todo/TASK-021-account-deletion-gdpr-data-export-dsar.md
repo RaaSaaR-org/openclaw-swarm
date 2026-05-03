@@ -57,13 +57,13 @@ EU users have legal rights under GDPR Art. 15 (right of access — get all your 
 - Phase 2 (the GDPR cron itself): a CronJob workload that calls `PurgeDeletedBefore(time.Now()-users.GracePeriod)` daily. Lives in the `swarm-cloud` deploy overlay (it's a deployment artifact, not platform code), but the primitive is now ready.
 - Phase 3 (cascade: Stripe cancel + KaiInstance delete + email-provider profile delete + log scrub): blocked on TASK-016 (Stripe) and a deletion-orchestrator that wires the cascade.
 - Phase 4 (data export zip — Art. 15 right-of-access): biggest piece. Needs a job that walks user → KaiInstances → PVC chat history → Stripe invoices, packs into a zip, uploads to a 7-day signed URL bucket, emails the link.
-- Phase 5 (deletion audit log — id hash + timestamp, no PII): small, can ship anytime; deferred until Phase 1 has a real deletion event to record.
+**Phase 5 (deletion audit log) — done** on 2026-05-03. New `deletion_audit` table on Postgres (`id_hash TEXT PRIMARY KEY`, `deleted_at`, `purged_at`). `id_hash = sha256(user_id)` — proves "yes we deleted user X" without storing PII. `PoolStore.SoftDelete` now wraps the UPDATE + audit-INSERT in a single transaction so the audit row and the soft-delete are atomic; `PoolStore.PurgeDeletedBefore` captures the doomed IDs before DELETE, hashes them, and updates `purged_at` on the audit rows in the same transaction so the audit survives the hard-delete forever. New `LookupDeletion(ctx, userID)` method answers "did we delete user X?" by hashing the candidate ID and looking up the audit row — returns `nil` for never-deleted users. End-to-end test against postgres:16-alpine: pre-delete null → soft-delete row appears with `deleted_at` set + `purged_at` nil → hard-purge fills `purged_at` + user row is gone but audit survives.
 
 ## Acceptance Criteria
 - [ ] User can request account deletion via UI; confirmation requires email click (Phase 1)
 - [ ] Cascade: Stripe canceled, all KaiInstances deleted (verified empty namespace), User record purged (Phase 3 — User record purge primitive ready in Phase 0)
 - [ ] Data export downloads as zip with everything we hold (Phase 4)
-- [ ] Audit log records deletion timestamp (no PII) (Phase 5)
+- [x] Audit log records deletion timestamp (no PII) (Phase 5, 2026-05-03 — `deletion_audit` table + `LookupDeletion`)
 - [ ] Privacy page documents retention windows (Phase 1.B — privacy page already exists in swarm-cloud/web/marketing/, retention numbers are placeholder; refine alongside the lawyer review)
 - [x] Phase 0: `PurgeDeletedBefore` primitive on pkg/users.Store + 30-day `GracePeriod` constant; both stores implemented; Postgres integration test green (2026-05-03)
 
