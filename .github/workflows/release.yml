@@ -58,8 +58,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # customer-chat and customer-center build from the repo root because
-          # their Dockerfiles COPY the shared pkg/ module (TASK-004).
+          # customer-chat / customer-center / onboarding build from the repo
+          # root because their Dockerfiles COPY the shared pkg/ modules
+          # (pkg/auth from TASK-004; pkg/email + pkg/users added in TASK-013).
           - app: customer-chat
             context: .
             dockerfile: web/customer-chat/Dockerfile
@@ -70,7 +71,7 @@ jobs:
             context: web/admin-console
             dockerfile: web/admin-console/Dockerfile
           - app: onboarding
-            context: web/onboarding
+            context: .
             dockerfile: web/onboarding/Dockerfile
           - app: status-page
             context: web/status-page

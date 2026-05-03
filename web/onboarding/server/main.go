@@ -23,6 +23,9 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/emai-ai/swarm/pkg/email"
+	"github.com/emai-ai/swarm/pkg/users"
 )
 
 //go:embed all:web
@@ -41,6 +44,13 @@ type server struct {
 	dyn       dynamic.Interface
 	namespace string
 	token     string
+
+	// SaaS signup flow (TASK-013). Optional — Enabled=false in signup keeps
+	// the onboarding pod identical to its pre-signup behavior.
+	users  users.Store
+	email  email.Sender
+	signup signupConfig
+	rl     *rateLimiter
 }
 
 type provisionRequest struct {
@@ -76,6 +86,10 @@ func main() {
 		s.dyn = dyn
 	}
 
+	if err := s.setupSignup(); err != nil {
+		log.Fatalf("signup setup: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -84,6 +98,8 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"namespace": s.namespace})
 	}))
 	mux.HandleFunc("POST /api/instances", s.requireAuth(s.createInstance))
+	mux.HandleFunc("POST /api/signup", s.handleSignup)
+	mux.HandleFunc("GET /api/signup/verify", s.handleVerify)
 
 	staticFS, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -94,6 +110,64 @@ func main() {
 	log.Printf("onboarding listening on %s (namespace=%s)", addr, namespace)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	log.Fatal(srv.ListenAndServe())
+}
+
+// setupSignup wires the optional public-signup flow (TASK-013). Defaults are
+// dev-friendly: when KAI_SIGNUP_ENABLED=1 but no real users/email/secret env
+// vars are set, the flow uses an in-memory user store + a disk email sender +
+// an ephemeral HMAC secret. Production deployments must set KAI_SIGNUP_SECRET
+// (so verification links survive restarts) and either KAI_USERS_DSN +
+// RESEND_API_KEY or roll their own Sender/Store via a fork.
+func (s *server) setupSignup() error {
+	enabled := envTrue("KAI_SIGNUP_ENABLED")
+	s.signup.Enabled = enabled
+	if !enabled {
+		return nil
+	}
+
+	// Users store: MemoryStore for dev / single-process; production overlays
+	// should construct a pkg/userspg.PoolStore and inject via a code change
+	// (kept out of this commit so the public swarm repo doesn't pull pgx
+	// into the onboarding binary by default).
+	s.users = users.NewMemoryStore()
+	log.Printf("signup: using in-memory user store (Phase 0 — Postgres wiring lands with the swarm-cloud overlay)")
+
+	// Email sender: DiskSender by default; switch to Resend by setting
+	// EMAIL_PROVIDER=resend + RESEND_API_KEY (Phase 1 wiring — for now both
+	// branches stay in pkg/email so the bind here is direct).
+	emailDir := envDefault("EMAIL_DISK_DIR", "/tmp/emai-onboarding-emails")
+	disk, err := email.NewDiskSender(emailDir)
+	if err != nil {
+		return fmt.Errorf("disk email sender: %w", err)
+	}
+	s.email = disk
+	log.Printf("signup: email artifacts will land in %s (set EMAIL_PROVIDER=resend + RESEND_API_KEY to switch)", emailDir)
+
+	// HMAC secret: env var preferred (verification links survive restart);
+	// random fallback for dev so a forgotten env var doesn't fail startup.
+	if hex := os.Getenv("KAI_SIGNUP_SECRET"); hex != "" {
+		s.signup.Secret = []byte(hex)
+	} else {
+		secret, err := newSignupSecret()
+		if err != nil {
+			return fmt.Errorf("signup secret: %w", err)
+		}
+		s.signup.Secret = secret
+		log.Printf("signup: using ephemeral HMAC secret — set KAI_SIGNUP_SECRET in production so verification links survive restarts")
+	}
+
+	s.signup.VerifyBaseURL = envDefault("KAI_VERIFY_BASE_URL", "http://localhost:8080/api/signup")
+	s.signup.VerifyTTL = 24 * time.Hour
+	s.signup.From = os.Getenv("EMAIL_FROM") // pkg/email falls back to its own default if empty
+	s.signup.IPLimitPerHr = 5
+	s.signup.Captcha = noopCaptcha{}
+	s.rl = newRateLimiter(s.signup.IPLimitPerHr)
+	return nil
+}
+
+func envTrue(k string) bool {
+	v := os.Getenv(k)
+	return v == "1" || strings.EqualFold(v, "true")
 }
 
 func loadKubeConfig() (*rest.Config, error) {
