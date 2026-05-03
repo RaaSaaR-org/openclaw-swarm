@@ -23,7 +23,6 @@ web/*/server/swarm-*
 
 # IDE
 .claude/
-.mc/
 
 # Test artifacts
 *.png
