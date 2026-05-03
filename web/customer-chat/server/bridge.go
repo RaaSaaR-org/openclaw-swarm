@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +12,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -38,40 +35,21 @@ func newBridgePool(s *server) *bridgePool {
 }
 
 // bridgeConfig collects everything needed to bring an upstream connection up.
+//
+// The bridge connects via the gateway's controlUi mode with
+// `dangerouslyDisableDeviceAuth: true` (set by the operator template), so
+// per-bridge ed25519 device identity is no longer needed — only the gateway
+// auth token is sent. The chat-bridge Secret still holds a JWT-signing key,
+// but that is read by auth.go for cookie sessions, not here.
 type bridgeConfig struct {
 	GatewayURL   string // ws://host:port
 	GatewayToken string
-	DeviceID     string
-	DevicePub    string // base64url, raw 32 bytes
-	DevicePriv   ed25519.PrivateKey
 }
 
-// loadBridgeConfig reads the chat-bridge Secret + KaiInstance for slug.
+// loadBridgeConfig reads the gateway URL + token from the KaiInstance for slug.
 func (p *bridgePool) loadBridgeConfig(ctx context.Context, slug string) (*bridgeConfig, error) {
-	if p.s.core == nil || p.s.dyn == nil {
+	if p.s.dyn == nil {
 		return nil, errors.New("no kube client")
-	}
-
-	sec, err := p.s.core.CoreV1().Secrets(p.s.namespace).Get(ctx, "kai-"+slug+"-chat-bridge", metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("chat-bridge secret missing for %s", slug)
-		}
-		return nil, err
-	}
-
-	devID := string(sec.Data["device-id"])
-	devPubB64 := string(sec.Data["device-public"])
-	devPrivB64 := string(sec.Data["device-private"])
-	if devID == "" || devPubB64 == "" || devPrivB64 == "" {
-		return nil, errors.New("chat-bridge secret incomplete")
-	}
-	privBytes, err := base64.RawURLEncoding.DecodeString(devPrivB64)
-	if err != nil {
-		return nil, fmt.Errorf("decode device-private: %w", err)
-	}
-	if len(privBytes) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("device-private wrong size: %d", len(privBytes))
 	}
 
 	obj, err := p.s.dyn.Resource(kaiInstanceGVR).Namespace(p.s.namespace).Get(ctx, "kai-"+slug, metav1.GetOptions{})
@@ -95,9 +73,6 @@ func (p *bridgePool) loadBridgeConfig(ctx context.Context, slug string) (*bridge
 	return &bridgeConfig{
 		GatewayURL:   gatewayURL,
 		GatewayToken: gatewayToken,
-		DeviceID:     devID,
-		DevicePub:    devPubB64,
-		DevicePriv:   ed25519.PrivateKey(privBytes),
 	}, nil
 }
 
@@ -169,43 +144,33 @@ func (p *bridgePool) dialUpstream(ctx context.Context, slug, email string) (*ups
 	return c, nil
 }
 
-// handshake awaits the connect.challenge event then sends a signed connect request.
+// handshake awaits the connect.challenge event then sends a connect request
+// without device identity. The gateway is configured with
+// `controlUi.dangerouslyDisableDeviceAuth: true`, so connections from
+// role:operator clients without a `device` field skip the pairing-required
+// check and authenticate purely with the gateway token.
 func (c *upstreamConn) handshake(ctx context.Context) error {
 	hsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	// Wait for the challenge event.
-	var nonce string
-	for nonce == "" {
+	// Wait for the challenge event so we know the gateway is past handshake init.
+	// The nonce is intentionally ignored — there is no signature to compute.
+	for {
 		_, raw, err := c.ws.Read(hsCtx)
 		if err != nil {
 			return fmt.Errorf("read challenge: %w", err)
 		}
 		var msg struct {
-			Type    string          `json:"type"`
-			Event   string          `json:"event"`
-			Payload json.RawMessage `json:"payload"`
+			Type  string `json:"type"`
+			Event string `json:"event"`
 		}
 		if err := json.Unmarshal(raw, &msg); err != nil {
 			continue
 		}
 		if msg.Type == "event" && msg.Event == "connect.challenge" {
-			var p struct {
-				Nonce string `json:"nonce"`
-			}
-			if err := json.Unmarshal(msg.Payload, &p); err == nil {
-				nonce = p.Nonce
-			}
+			break
 		}
 	}
-
-	signedAt := time.Now().UnixMilli()
-	payload := fmt.Sprintf("v2|%s|%s|%s|%s|%s|%d|%s|%s",
-		c.cfg.DeviceID, clientID, clientMode, role,
-		strings.Join(clientScopes, ","), signedAt, c.cfg.GatewayToken, nonce,
-	)
-	sig := ed25519.Sign(c.cfg.DevicePriv, []byte(payload))
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	connectReq := map[string]any{
 		"minProtocol": openClawVer,
@@ -216,17 +181,10 @@ func (c *upstreamConn) handshake(ctx context.Context) error {
 			"platform": "go-bridge",
 			"mode":     clientMode,
 		},
-		"role":   role,
-		"scopes": clientScopes,
-		"caps":   []any{},
-		"auth":   map[string]any{"token": c.cfg.GatewayToken},
-		"device": map[string]any{
-			"id":        c.cfg.DeviceID,
-			"publicKey": c.cfg.DevicePub,
-			"signature": sigB64,
-			"signedAt":  signedAt,
-			"nonce":     nonce,
-		},
+		"role":      role,
+		"scopes":    clientScopes,
+		"caps":      []any{},
+		"auth":      map[string]any{"token": c.cfg.GatewayToken},
 		"locale":    "en",
 		"userAgent": "emai-customer-chat-bridge/1.0",
 	}
