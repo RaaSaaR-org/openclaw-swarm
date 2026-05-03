@@ -15,6 +15,7 @@ archive/
 # Build / Dependencies
 node_modules/
 dist/
+web/*/server/swarm-*
 
 # OS
 .DS_Store
@@ -22,6 +23,7 @@ dist/
 
 # IDE
 .claude/
+.mc/
 
 # Test artifacts
 *.png
