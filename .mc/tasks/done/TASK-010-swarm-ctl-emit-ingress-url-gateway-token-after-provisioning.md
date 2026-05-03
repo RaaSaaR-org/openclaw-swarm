@@ -4,7 +4,7 @@ aliases:
 - TASK-010
 title: 'swarm-ctl: emit ingress URL + gateway token after provisioning'
 slug: swarm-ctl-emit-ingress-url-gateway-token-after-provisioning
-status: backlog
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -18,6 +18,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # swarm-ctl: emit ingress URL + gateway token after provisioning
