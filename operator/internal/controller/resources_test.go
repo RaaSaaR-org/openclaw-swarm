@@ -576,6 +576,46 @@ func TestBuildIngress(t *testing.T) {
 	}
 }
 
+func TestSpecEffectiveNameAndSlugPrecedence(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name           string
+		spec           swarmv1alpha1.KaiInstanceSpec
+		wantName, wantSlug string
+	}{
+		{
+			"legacy only",
+			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Acme GmbH", CustomerSlug: "acme"},
+			"Acme GmbH", "acme",
+		},
+		{
+			"tenant overrides legacy",
+			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Old Name", CustomerSlug: "old", TenantName: "New Name", TenantSlug: "new"},
+			"New Name", "new",
+		},
+		{
+			"tenant only (legacy unset)",
+			swarmv1alpha1.KaiInstanceSpec{TenantName: "Tenant Alone", TenantSlug: "tenant"},
+			"Tenant Alone", "tenant",
+		},
+		{
+			"mixed: tenant name + legacy slug",
+			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Old", CustomerSlug: "legacy", TenantName: "New"},
+			"New", "legacy",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.spec.EffectiveName(); got != c.wantName {
+				t.Errorf("EffectiveName = %q, want %q", got, c.wantName)
+			}
+			if got := c.spec.EffectiveSlug(); got != c.wantSlug {
+				t.Errorf("EffectiveSlug = %q, want %q", got, c.wantSlug)
+			}
+		})
+	}
+}
+
 func TestBuildIngressPerSlugSubdomain(t *testing.T) {
 	t.Parallel()
 	kai := newTestKaiInstance("kai-test", "emai-swarm")

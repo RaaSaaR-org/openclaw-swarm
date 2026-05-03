@@ -23,7 +23,13 @@ import (
 
 // KaiInstanceSpec defines the desired state of a customer Kai agent instance.
 type KaiInstanceSpec struct {
-	// customerName is the display name of the customer (e.g. "Acme GmbH").
+	// customerName is the display name of the workspace's owning entity
+	// (e.g. "Acme GmbH"). Legacy field name; the SaaS-direction
+	// alternative is `tenantName` below — when both are set, `tenantName`
+	// wins. The two coexist on v1alpha1 so existing internal-tenant
+	// manifests in swarm-emai/swarm-config keep working while new code
+	// migrates to the tenant-* names. Both retire in v1alpha2 + a
+	// conversion webhook (TASK-012 Phase 2.B + TASK-024 Phase 5).
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=100
 	CustomerName string `json:"customerName"`
@@ -34,11 +40,30 @@ type KaiInstanceSpec struct {
 	ProjectName string `json:"projectName"`
 
 	// customerSlug is the DNS-safe identifier, auto-derived from customerName if empty.
-	// Once set, it becomes immutable.
+	// Once set, it becomes immutable. Legacy field name; the SaaS-direction
+	// alternative is `tenantSlug` — when both are set, `tenantSlug` wins.
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
 	// +kubebuilder:validation:MaxLength=63
 	// +optional
 	CustomerSlug string `json:"customerSlug,omitempty"`
+
+	// tenantName is the SaaS-direction display name for the workspace's
+	// owning entity. When set, it takes precedence over `customerName`.
+	// Both fields live side-by-side on v1alpha1 so the public swarm repo
+	// can be tenant-clean (TASK-024) while existing swarm-emai/swarm-config
+	// manifests keep working unchanged. The conversion webhook in v1alpha2
+	// (TASK-012 Phase 2.B) drops `customerName` entirely.
+	// +kubebuilder:validation:MaxLength=100
+	// +optional
+	TenantName string `json:"tenantName,omitempty"`
+
+	// tenantSlug is the SaaS-direction DNS-safe identifier. When set, it
+	// takes precedence over `customerSlug`. Same coexistence story as
+	// `tenantName` above.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	// +optional
+	TenantSlug string `json:"tenantSlug,omitempty"`
 
 	// model overrides the default LLM model.
 	// +optional
@@ -144,6 +169,29 @@ const (
 	ConditionPVCBound             = "PVCBound"
 	ConditionIngressReady         = "IngressReady"
 )
+
+// EffectiveName returns the workspace's display name, preferring the
+// SaaS-direction `tenantName` when set and falling back to the legacy
+// `customerName` otherwise. Use this everywhere the operator reads the
+// "what to call this workspace" string — never read CustomerName / TenantName
+// directly. Mirror logic with EffectiveSlug below. (TASK-024 Phase 2)
+func (s KaiInstanceSpec) EffectiveName() string {
+	if s.TenantName != "" {
+		return s.TenantName
+	}
+	return s.CustomerName
+}
+
+// EffectiveSlug returns the workspace's slug, preferring the
+// SaaS-direction `tenantSlug` when set and falling back to the legacy
+// `customerSlug` otherwise. Empty when neither is set — caller derives
+// the slug from the (effective) name in that case.
+func (s KaiInstanceSpec) EffectiveSlug() string {
+	if s.TenantSlug != "" {
+		return s.TenantSlug
+	}
+	return s.CustomerSlug
+}
 
 // KaiInstanceFinalizer reserves a pre-delete hook on the KaiInstance object so
 // the operator gets a chance to run cleanup before garbage collection. Today

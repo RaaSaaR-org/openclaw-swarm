@@ -70,15 +70,22 @@ spec:
                 pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
                 type: string
               customerName:
-                description: customerName is the display name of the customer (e.g.
-                  "Acme GmbH").
+                description: |-
+                  customerName is the display name of the workspace's owning entity
+                  (e.g. "Acme GmbH"). Legacy field name; the SaaS-direction
+                  alternative is `tenantName` below — when both are set, `tenantName`
+                  wins. The two coexist on v1alpha1 so existing internal-tenant
+                  manifests in swarm-emai/swarm-config keep working while new code
+                  migrates to the tenant-* names. Both retire in v1alpha2 + a
+                  conversion webhook (TASK-012 Phase 2.B + TASK-024 Phase 5).
                 maxLength: 100
                 minLength: 1
                 type: string
               customerSlug:
                 description: |-
                   customerSlug is the DNS-safe identifier, auto-derived from customerName if empty.
-                  Once set, it becomes immutable.
+                  Once set, it becomes immutable. Legacy field name; the SaaS-direction
+                  alternative is `tenantSlug` — when both are set, `tenantSlug` wins.
                 maxLength: 63
                 pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
                 type: string
@@ -203,6 +210,24 @@ spec:
                 required:
                 - botTokenSecretRef
                 type: object
+              tenantName:
+                description: |-
+                  tenantName is the SaaS-direction display name for the workspace's
+                  owning entity. When set, it takes precedence over `customerName`.
+                  Both fields live side-by-side on v1alpha1 so the public swarm repo
+                  can be tenant-clean (TASK-024) while existing swarm-emai/swarm-config
+                  manifests keep working unchanged. The conversion webhook in v1alpha2
+                  (TASK-012 Phase 2.B) drops `customerName` entirely.
+                maxLength: 100
+                type: string
+              tenantSlug:
+                description: |-
+                  tenantSlug is the SaaS-direction DNS-safe identifier. When set, it
+                  takes precedence over `customerSlug`. Same coexistence story as
+                  `tenantName` above.
+                maxLength: 63
+                pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+                type: string
               tier:
                 description: |-
                   tier is the SaaS plan this workspace belongs to. Drives default model

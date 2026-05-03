@@ -115,10 +115,15 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	// 4. Resolve the customer slug
-	slug := kai.Spec.CustomerSlug
+	// 4. Resolve the workspace slug. Prefers spec.tenantSlug when set
+	// (TASK-024 Phase 2), falls back to spec.customerSlug, falls back to a
+	// slug derived from the effective name. The EffectiveSlug/EffectiveName
+	// helpers route through the tenant-* fields first so the public swarm
+	// repo's code path is tenant-clean even though v1alpha1 still carries
+	// the legacy customer-* fields for backwards compat.
+	slug := kai.Spec.EffectiveSlug()
 	if slug == "" {
-		slug = slugify(kai.Spec.CustomerName)
+		slug = slugify(kai.Spec.EffectiveName())
 	}
 
 	// Persist slug in status so it's stable
@@ -147,7 +152,7 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		model = kai.Spec.Model
 	}
 	tmpl, err := renderAllTemplates(templateVars{
-		CustomerName: kai.Spec.CustomerName,
+		CustomerName: kai.Spec.EffectiveName(),
 		CustomerSlug: slug,
 		ProjectName:  kai.Spec.ProjectName,
 	}, templateOpts{
