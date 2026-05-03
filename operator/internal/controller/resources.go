@@ -56,6 +56,33 @@ func commonLabels(slug string) map[string]string {
 	}
 }
 
+// commonLabelsFor extends commonLabels with the SaaS-direction labels
+// derived from optional KaiInstance.Spec fields (tier, userRef, org, appRef,
+// managed — added by TASK-012 Phase 2.A). Missing fields skip cleanly so
+// existing tenants (which don't set them) keep their existing label set.
+func commonLabelsFor(kai *swarmv1alpha1.KaiInstance, slug string) map[string]string {
+	l := commonLabels(slug)
+	if kai == nil {
+		return l
+	}
+	if kai.Spec.UserRef != "" {
+		l["swarm.io/user-id"] = kai.Spec.UserRef
+	}
+	if kai.Spec.Tier != "" {
+		l["swarm.io/tier"] = kai.Spec.Tier
+	}
+	if kai.Spec.AppRef != "" {
+		l["swarm.io/app"] = kai.Spec.AppRef
+	}
+	if kai.Spec.Org != "" {
+		l["swarm.io/org"] = kai.Spec.Org
+	}
+	if kai.Spec.Managed != "" {
+		l["swarm.io/managed"] = kai.Spec.Managed
+	}
+	return l
+}
+
 // childName returns the name for a child resource.
 func childName(slug string) string {
 	return "kai-" + slug
@@ -67,7 +94,7 @@ func buildConfigMap(kai *swarmv1alpha1.KaiInstance, slug string, tmpl *renderedT
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      childName(slug) + "-identity",
 			Namespace: kai.Namespace,
-			Labels:    commonLabels(slug),
+			Labels:    commonLabelsFor(kai, slug),
 		},
 		Data: map[string]string{
 			"SOUL.md":       tmpl.SoulMD,
@@ -86,7 +113,7 @@ func buildPVC(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.PersistentVol
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      childName(slug) + "-state",
 			Namespace: kai.Namespace,
-			Labels:    commonLabels(slug),
+			Labels:    commonLabelsFor(kai, slug),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -112,7 +139,7 @@ type deploymentOpts struct {
 
 // buildDeployment creates the Deployment for the Kai agent.
 func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts deploymentOpts) *appsv1.Deployment {
-	labels := commonLabels(slug)
+	labels := commonLabelsFor(kai, slug)
 	name := childName(slug)
 
 	replicas := int32(1)
@@ -315,7 +342,7 @@ func buildService(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: kai.Namespace,
-			Labels:    commonLabels(slug),
+			Labels:    commonLabelsFor(kai, slug),
 		},
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
@@ -346,7 +373,7 @@ func buildNetworkPolicy(kai *swarmv1alpha1.KaiInstance, slug string) *networking
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name + "-isolation",
 			Namespace: kai.Namespace,
-			Labels:    commonLabels(slug),
+			Labels:    commonLabelsFor(kai, slug),
 		},
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
@@ -410,7 +437,7 @@ func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name + "-ws",
 			Namespace: kai.Namespace,
-			Labels:    commonLabels(slug),
+			Labels:    commonLabelsFor(kai, slug),
 			Annotations: map[string]string{
 				"traefik.ingress.kubernetes.io/router.entrypoints": "web,websecure",
 				"traefik.ingress.kubernetes.io/router.tls":         "true",

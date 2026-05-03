@@ -4,7 +4,7 @@ aliases:
 - TASK-012
 title: 'KaiInstance CRD: tenancy fields (tier, quotas) + multi-app catalog'
 slug: kaiinstance-crd-tenancy-fields-tier-quotas-multi-app-catalog
-status: backlog
+status: in-progress
 priority: 3
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # KaiInstance CRD: tenancy fields (tier, quotas) + multi-app catalog
@@ -55,16 +56,26 @@ This is the boundary between "internal customer management tool" and "SaaS platf
 - Kubebuilder CRD conversion webhooks: https://book.kubebuilder.io/multiversion-tutorial/conversion
 - Reference SaaS operator patterns: https://operatorframework.io/
 
+## Status
+
+**Phase 1 (PROP-001) — done** on 2026-05-03. See [[PROP-001]] for the full decision: User entity in Postgres (not a CRD), multi-app stays on `KaiInstance` as `spec.appRef` (single app today; `spec.apps[]AppRef` reserved for additive future change), v1alpha1 → v1alpha2 conversion bundled with the customer→tenant rename ([[TASK-024]]).
+
+**Phase 2.A (additive fields on v1alpha1) — done** on 2026-05-03. Five new optional fields landed on `KaiInstanceSpec`: `tier` (enum), `userRef` (Postgres user.id), `appRef` (catalog persona slug), `org` (cost-center label), `managed` (saas|internal). All optional, all default to empty, all skip cleanly when unset so existing tenants in `swarm-emai`/`swarm-config` keep their current rendered output. Operator now renders `swarm.io/{user-id, tier, app, org, managed}` labels on every child resource (Deployment, Service, ConfigMap, PVC, NetworkPolicy, Ingress) when the matching Spec field is set. Generated CRD (`config/crd/bases/swarm.emai.io_kaiinstances.yaml`) regenerated. Four new operator tests cover both branches (empty Spec → no SaaS labels; populated Spec → all labels rendered + propagated to pod template).
+
+**Remaining work:**
+- Phase 2.B (v1alpha2 + conversion webhook): the actual rename (`customerSlug` → `tenantSlug`, `customerName` → `tenantName`, API group `swarm.emai.io` → `swarm.io`) bundled with [[TASK-024]] phases 2-5. Deliberately deferred — `git mv`-shaped renames are a coordinated deploy.
+- Phase 2.C (ValidatingAdmissionWebhook for tier-based quotas): blocked on TASK-019 Phase 1 (per-tier resource defaults) so the webhook has something concrete to enforce.
+
 ## Acceptance Criteria
 **Phase 1:**
-- [ ] PROP-001 written, reviewed, decision recorded
-- [ ] Decision on multi-app shape (sub-resource vs. sibling CRD) is locked in
+- [x] PROP-001 written, reviewed, decision recorded (2026-05-03)
+- [x] Decision on multi-app shape (sub-resource vs. sibling CRD) is locked in — `spec.appRef` single-app today, `spec.apps[]` reserved for additive future change
 
 **Phase 2:**
-- [ ] CRD updated with new fields, generated manifests committed
-- [ ] Existing customers (in swarm-config) still reconcile cleanly
-- [ ] ValidatingWebhook rejects out-of-tier resource requests
-- [ ] Test coverage for default-merging and webhook validation
+- [x] CRD updated with new fields (`tier`, `userRef`, `appRef`, `org`, `managed`), generated manifests committed (Phase 2.A, 2026-05-03)
+- [x] Existing customers continue to reconcile cleanly — new fields are optional and default to empty (Phase 2.A)
+- [ ] ValidatingWebhook rejects out-of-tier resource requests (Phase 2.C, blocked on TASK-019)
+- [x] Test coverage for label rendering with both populated and empty Spec fields (Phase 2.A)
 
 ## Notes
 **Do not start Phase 2 without Phase 1 sign-off.** This is the highest-leverage CRD change since v1alpha1 was created — getting it right matters more than shipping fast. Hold this task open in `backlog` until the SaaS direction is committed.

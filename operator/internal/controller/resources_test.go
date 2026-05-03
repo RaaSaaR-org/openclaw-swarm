@@ -261,6 +261,62 @@ func TestCommonLabelsCarriesBothLegacyAndNewTenantLabel(t *testing.T) {
 	}
 }
 
+func TestCommonLabelsForOmitsSaaSLabelsWhenSpecFieldsEmpty(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	got := commonLabelsFor(kai, "test")
+	for _, k := range []string{"swarm.io/user-id", "swarm.io/tier", "swarm.io/app", "swarm.io/org", "swarm.io/managed"} {
+		if _, present := got[k]; present {
+			t.Errorf("%s should not be present when spec field is empty (got %q)", k, got[k])
+		}
+	}
+	// Sanity: legacy + tenant still there.
+	if got["swarm.io/tenant"] != "test" {
+		t.Errorf("swarm.io/tenant missing or wrong: %q", got["swarm.io/tenant"])
+	}
+}
+
+func TestCommonLabelsForRendersAllSaaSLabelsWhenSpecFieldsSet(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.UserRef = "u_01HX3ZQABC"
+	kai.Spec.Tier = "starter"
+	kai.Spec.AppRef = "personal-assistant"
+	kai.Spec.Org = "acme-gmbh"
+	kai.Spec.Managed = "saas"
+
+	got := commonLabelsFor(kai, "test")
+	cases := map[string]string{
+		"swarm.io/user-id": "u_01HX3ZQABC",
+		"swarm.io/tier":    "starter",
+		"swarm.io/app":     "personal-assistant",
+		"swarm.io/org":     "acme-gmbh",
+		"swarm.io/managed": "saas",
+	}
+	for k, want := range cases {
+		if got[k] != want {
+			t.Errorf("%s = %q, want %q", k, got[k], want)
+		}
+	}
+}
+
+func TestBuildDeploymentPropagatesSaaSLabelsToPodTemplate(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.UserRef = "u_01HX3ZQABC"
+	kai.Spec.Tier = "starter"
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+
+	// Pod template labels are what kubectl get pod -l swarm.io/user-id=... selects on.
+	pod := deploy.Spec.Template.Labels
+	if pod["swarm.io/user-id"] != "u_01HX3ZQABC" {
+		t.Errorf("pod label swarm.io/user-id = %q, want u_01HX3ZQABC", pod["swarm.io/user-id"])
+	}
+	if pod["swarm.io/tier"] != "starter" {
+		t.Errorf("pod label swarm.io/tier = %q, want starter", pod["swarm.io/tier"])
+	}
+}
+
 func TestBuildDeploymentOpenRouterDefaultPerSlugSecret(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})

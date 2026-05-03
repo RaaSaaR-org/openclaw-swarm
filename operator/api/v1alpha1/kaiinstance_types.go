@@ -64,6 +64,48 @@ type KaiInstanceSpec struct {
 	// Defaults to true when omitted.
 	// +optional
 	ExternalAccess *bool `json:"externalAccess,omitempty"`
+
+	// tier is the SaaS plan this workspace belongs to. Drives default model
+	// selection and per-tenant quotas (TASK-019). Empty defaults to "free".
+	// +kubebuilder:validation:Enum=free;starter;growth;enterprise
+	// +optional
+	Tier string `json:"tier,omitempty"`
+
+	// userRef is the Postgres `users.id` (u_<ulid>) of the workspace owner.
+	// Required for `managed: saas`; null/empty for `managed: internal`
+	// (system-owned EmAI tenants — see PROP-003 coexistence rule). When set,
+	// the operator labels every child resource with `swarm.io/user-id=<ref>`
+	// so the dashboard's "your workspaces" view (TASK-014 Phase 3) can do a
+	// label-selector list.
+	// +kubebuilder:validation:MaxLength=64
+	// +optional
+	UserRef string `json:"userRef,omitempty"`
+
+	// appRef points at a curated persona under `agents/catalog/<slug>` (see
+	// TASK-018). Empty falls back to the legacy customer-template renderer.
+	// The operator's catalog renderer (TASK-018 Phase 1, future) reads this
+	// to pick which SOUL.md to embed in the per-tenant ConfigMap.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	// +optional
+	AppRef string `json:"appRef,omitempty"`
+
+	// org is a free-form cost-center / billing-group label. Useful for
+	// multi-workspace customers that want consolidated billing or for
+	// internal EmAI tenants that want grouping. No semantic enforcement —
+	// it lands as the `swarm.io/org=<value>` label on child resources.
+	// +kubebuilder:validation:MaxLength=63
+	// +optional
+	Org string `json:"org,omitempty"`
+
+	// managed selects the deployment mode (PROP-003): `saas` workspaces
+	// have a User above them and participate in billing/quota webhooks;
+	// `internal` workspaces are system-owned EmAI tenants and skip those
+	// flows. Empty defaults to `saas` (the SaaS-first default); explicit
+	// `internal` is required for system-owned tenants in `swarm-emai`.
+	// +kubebuilder:validation:Enum=saas;internal
+	// +optional
+	Managed string `json:"managed,omitempty"`
 }
 
 // TelegramConfig holds Telegram bot integration settings.
