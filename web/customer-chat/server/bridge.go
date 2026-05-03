@@ -135,7 +135,16 @@ func (p *bridgePool) dialUpstream(ctx context.Context, slug, email string) (*ups
 
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	ws, _, err := websocket.Dial(dialCtx, cfg.GatewayURL, &websocket.DialOptions{})
+	// OpenClaw's gateway.controlUi.allowedOrigins rejects connections with a
+	// missing or unlisted Origin. Send the public chat host so customers' gateway
+	// configs (which already allow https://<host>) accept the bridge.
+	bridgeOrigin := os.Getenv("BRIDGE_ORIGIN")
+	if bridgeOrigin == "" {
+		bridgeOrigin = "https://kai.emai.dev"
+	}
+	ws, _, err := websocket.Dial(dialCtx, cfg.GatewayURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": []string{bridgeOrigin}},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", cfg.GatewayURL, err)
 	}
