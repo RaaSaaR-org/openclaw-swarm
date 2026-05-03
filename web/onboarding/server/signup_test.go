@@ -10,6 +10,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
@@ -286,6 +287,51 @@ func TestHandleVerifyWithoutDynClientStillVerifies(t *testing.T) {
 	u, _ := s.users.GetByID(context.Background(), id)
 	if u.EmailVerifiedAt == nil {
 		t.Error("user must be verified even when provisioning is skipped")
+	}
+}
+
+func TestHandleVerifyRefuses402WhenTierCapReached(t *testing.T) {
+	t.Parallel()
+	s, cap := newSignupServer(t)
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse"}`))
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id, tok := parsed.Query().Get("id"), parsed.Query().Get("token")
+
+	// Seed a separate KaiInstance carrying THIS user's swarm.io/user-id label
+	// so the cap check sees count=1 (free tier MaxInstancesPerUser). The slug
+	// differs from the verify-derived slug so the idempotency branch doesn't
+	// fire — this simulates "user already has 1 workspace, tries to provision
+	// another", which the dashboard "create another workspace" flow (Phase 3)
+	// will exercise on the same code path.
+	existing := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "swarm.emai.io/v1alpha1",
+		"kind":       "KaiInstance",
+		"metadata": map[string]any{
+			"name":      "kai-pre-existing",
+			"namespace": s.namespace,
+			"labels": map[string]any{
+				"swarm.io/user-id": id,
+			},
+		},
+		"spec": map[string]any{},
+	}}
+	_, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Create(context.Background(), existing, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	s.handleVerify(rr, httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil))
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402 when at tier cap, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "tier_limit_reached") {
+		t.Errorf("body must include tier_limit_reached, got %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "/pricing") {
+		t.Errorf("body must include upgrade link, got %s", rr.Body.String())
 	}
 }
 

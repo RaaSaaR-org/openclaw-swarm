@@ -23,6 +23,7 @@ import (
 
 	"github.com/emai-ai/swarm/pkg/auth"
 	"github.com/emai-ai/swarm/pkg/email"
+	"github.com/emai-ai/swarm/pkg/quotas"
 	"github.com/emai-ai/swarm/pkg/users"
 )
 
@@ -196,6 +197,47 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]string{"status": "verified"}
 	if s.dyn != nil {
 		slug := slugFromUserID(u.ID)
+		// Idempotency: if THIS user's workspace already exists at the
+		// derived slug, return 200. We check before the tier-cap check
+		// because re-clicking the verify link should not be a "tier
+		// exceeded" error — it's just re-confirming an existing workspace.
+		_, getErr := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Get(r.Context(), "kai-"+slug, metav1.GetOptions{})
+		if getErr == nil {
+			log.Printf("verify: workspace already exists for %s, idempotent 200", u.Email)
+			resp["workspace"] = slug
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+		if !apierrors.IsNotFound(getErr) {
+			log.Printf("verify: workspace lookup for %s: %v", u.Email, getErr)
+			writeErr(w, http.StatusBadGateway, fmt.Errorf("verified but workspace lookup failed: %w", getErr))
+			return
+		}
+
+		// Tier-cap check (TASK-015 Phase 1). Counts existing workspaces for
+		// this user via the swarm.io/user-id label and refuses to create a
+		// new one if the tier's MaxInstancesPerUser is reached. Today the
+		// per-user count is always 0 here (the existing-workspace branch
+		// above handles the count=1 case); the check fires meaningfully
+		// when the dashboard adds "create another workspace" (Phase 3) —
+		// that path lets the same user mint multiple workspaces with
+		// picked slugs, and the cap stops them from exhausting tier limits.
+		count, err := s.countWorkspacesForUser(r.Context(), u.ID)
+		if err != nil {
+			log.Printf("verify: count workspaces for %s: %v", u.Email, err)
+			writeErr(w, http.StatusBadGateway, fmt.Errorf("verified but workspace count failed: %w", err))
+			return
+		}
+		tier := quotas.Tier(u.Tier)
+		if quotas.MaxInstancesReached(tier, count) {
+			writeJSON(w, http.StatusPaymentRequired, map[string]string{
+				"error":   "tier_limit_reached",
+				"message": fmt.Sprintf("you have %d workspaces on the %s tier; upgrade at /pricing to add more", count, u.Tier),
+				"tier":    string(u.Tier),
+			})
+			return
+		}
+
 		gatewayToken, err := generateToken()
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, fmt.Errorf("token gen: %w", err))
@@ -204,10 +246,9 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		obj := buildSaaSKaiInstance(s.namespace, slug, u, gatewayToken)
 		if _, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Create(r.Context(), obj, metav1.CreateOptions{}); err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				// Verify clicked twice — fine, workspace already exists.
-				log.Printf("verify: workspace already exists for %s: %v", u.Email, err)
+				// TOCTOU: another verify click won the race. Idempotent.
+				log.Printf("verify: race created workspace for %s: %v", u.Email, err)
 				resp["workspace"] = slug
-				resp["status"] = "verified"
 				writeJSON(w, http.StatusOK, resp)
 				return
 			}
@@ -218,6 +259,23 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		resp["workspace"] = slug
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// countWorkspacesForUser counts the KaiInstances labelled `swarm.io/user-id=<userID>`.
+// The operator labels every child resource (and the KaiInstance itself, via
+// metadata) with the user-id when spec.userRef is set — TASK-012 Phase 2.A
+// + TASK-015 Phase 1 lean on this for tier-cap enforcement.
+func (s *server) countWorkspacesForUser(ctx context.Context, userID string) (int, error) {
+	if s.dyn == nil {
+		return 0, nil
+	}
+	list, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "swarm.io/user-id=" + userID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(list.Items), nil
 }
 
 // defaultSignupApp is the persona a brand-new SaaS workspace ships with
@@ -241,6 +299,11 @@ func slugFromUserID(userID string) string {
 // cluster on verify. Spec fields populated per PROP-001 + TASK-012 Phase
 // 2.A: managed:saas + tier:free + userRef + appRef + the gateway-auth
 // shape every operator-managed instance carries.
+//
+// We also stamp the SaaS labels onto the CR's metadata directly so the
+// tier-cap label-selector list (TASK-015 Phase 1) can find KaiInstances
+// per user without relying on the operator to relabel the CR itself —
+// the operator only labels child resources today.
 func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken string) *unstructured.Unstructured {
 	tier := string(u.Tier)
 	if tier == "" {
@@ -252,6 +315,13 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 		"metadata": map[string]any{
 			"name":      "kai-" + slug,
 			"namespace": namespace,
+			"labels": map[string]any{
+				"swarm.io/tenant":  slug,
+				"swarm.io/user-id": u.ID,
+				"swarm.io/tier":    tier,
+				"swarm.io/managed": "saas",
+				"swarm.io/app":     defaultSignupApp,
+			},
 			"annotations": map[string]any{
 				"swarm.io/created-by": "onboarding-signup",
 			},

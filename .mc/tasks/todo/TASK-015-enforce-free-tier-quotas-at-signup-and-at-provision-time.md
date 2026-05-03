@@ -22,6 +22,7 @@ updated: 2026-05-03
 
 
 
+
 # Enforce free-tier quotas at signup and at provision time
 
 ## Why
@@ -54,18 +55,19 @@ The instant signup is public (TASK-013), the platform is on the hook for whateve
 
 **Phase 0 (`pkg/quotas` + operator-side resource clamping) — done** on 2026-05-03. New sibling Go module `pkg/quotas/` ships the canonical Tier→Limits map for the SaaS direction. Public defaults match PROP-002 + TASK-015 numbers: free = 1 instance / 384Mi (matches `cc1ffec` argon2 headroom) / 100 messages-per-day / no Telegram / 14-day idle suspend; starter = 3 instances / 1Gi / 500k tokens-per-day; growth = 10 instances / 2Gi / 2M tokens-per-day; enterprise = all-zero (passthrough — overlay-controlled). `For()` does case-insensitive lookup with safe fallback to free for unknown tiers; `Override()` lets the deployment overlay swap any tier's numerical defaults from a ConfigMap. `ClampResources()` lowers over-tier requests/limits, fills missing fields with tier defaults, and passes through under-tier values unchanged. 100% test coverage on pkg/quotas. Operator wires `quotas.ClampResources` into `buildDeployment` only when the workspace is **SaaS-enrolled** (`spec.tier` set AND not `managed: internal`); legacy tenants and explicitly-internal tenants keep the original 1Gi/2Gi defaults so existing `swarm-emai`/`swarm-config` workspaces don't get silently throttled by a feature they never opted into. Three new operator tests cover the clamp path (free-tier 4Gi → 768Mi), the within-tier passthrough (growth + 1Gi → 1Gi), and the internal-managed exemption.
 
+**Phase 1 (signup-time instance-count check) — done** on 2026-05-03. Onboarding's `handleVerify` now counts existing workspaces with the `swarm.io/user-id=<u.ID>` label before provisioning a new one and refuses with **HTTP 402 Payment Required** when the user is at `quotas.For(tier).MaxInstancesPerUser`. Idempotency check runs FIRST: re-clicking the verify link for an existing workspace returns 200, not 402 (re-confirming an existing workspace isn't a tier-cap event). The 402 body carries `error: tier_limit_reached`, a tier-aware message, and a `/pricing` upgrade link. The KaiInstance carries the SaaS labels (`swarm.io/user-id`, `swarm.io/tier`, `swarm.io/managed=saas`, `swarm.io/app`) directly on its metadata so the label-selector list works without waiting for the operator to relabel the CR. Today the cap fires meaningfully when the dashboard adds "create another workspace" (TASK-013 Phase 3); it's a no-op for first-time signups (count=0).
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (signup-time instance-count check): blocked on TASK-013 Phase 1 (KaiInstance provisioning on verify) — needs the user→workspace count lookup to enforce `MaxInstancesPerUser`.
 - Phase 2 (ValidatingAdmissionWebhook on KaiInstance): defense-in-depth at the API server, rejects out-of-tier `spec.resources` BEFORE the operator sees them. Needs TLS cert + webhook server scaffold (kubebuilder-generated). Bundle with TASK-012 Phase 2.B (v1alpha2 + conversion webhook) so the operator only stands up one webhook server.
 - Phase 3 (idle-suspension cron): a separate workload that walks `KaiInstance` objects, checks `status.lastActivityAt` against `quotas.For(tier).IdleSuspendAfter`, patches `spec.suspended=true`. Needs a new status field + activity tracking.
 - Phase 4 (token-budget enforcement): hourly cron polls OpenRouter usage API per workspace, patches `spec.suspended=true` when over `DailyTokens`. Blocked on TASK-019 Phase 2 (usage-tracker cron framework).
 
 ## Acceptance Criteria
-- [ ] Signup beyond tier limit returns 402 Payment Required (or similar) with upgrade link (Phase 1)
+- [x] Signup beyond tier limit returns 402 Payment Required (or similar) with upgrade link (Phase 1, 2026-05-03)
 - [ ] ValidatingWebhook rejects KaiInstance specs that exceed tier resource limits (Phase 2)
 - [ ] Idle free-tier instances auto-suspend after N days (configurable) (Phase 3 — `IdleSuspendAfter` defined in pkg/quotas; cron is Phase 3)
 - [ ] Resuming a suspended free-tier instance is transparent to the user (chat still works) (Phase 3)
-- [ ] Tests: tier-limit math (Phase 0 ✓), webhook rejection (Phase 2), suspension/resume cycle (Phase 3)
+- [x] Tests: tier-limit math (Phase 0), 402-on-cap end-to-end (Phase 1) — webhook rejection (Phase 2), suspension/resume cycle (Phase 3) still pending
 - [x] Phase 0: `pkg/quotas` module with Tier→Limits map + `ClampResources`; operator clamps SaaS-enrolled tenants, leaves legacy/internal tenants untouched (2026-05-03)
 
 ## Notes
