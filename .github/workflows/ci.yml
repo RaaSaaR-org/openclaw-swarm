@@ -68,11 +68,15 @@ jobs:
         working-directory: web/${{ matrix.app }}/server
         run: go vet ./...
 
-      - name: Server build
+      - name: Server test
         working-directory: web/${{ matrix.app }}/server
         run: |
           mkdir -p web && touch web/.gitkeep
-          go build -o /dev/null .
+          go test ./...
+
+      - name: Server build
+        working-directory: web/${{ matrix.app }}/server
+        run: go build -o /dev/null .
 
   templates:
     name: Template Validation

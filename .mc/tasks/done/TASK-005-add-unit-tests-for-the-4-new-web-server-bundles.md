@@ -4,7 +4,7 @@ aliases:
 - TASK-005
 title: Add unit tests for the 4 new web server bundles
 slug: add-unit-tests-for-the-4-new-web-server-bundles
-status: backlog
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -18,6 +18,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Add unit tests for the 4 new web server bundles
