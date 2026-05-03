@@ -41,7 +41,7 @@ paths:
     get:
       summary: Read the tenant center page
       description: |
-        Returns customer name, project, status, channels, links, team, scope
+        Returns tenant name, project, status, channels, links, team, scope
         markdown, heartbeat markdown, and recent briefings. No auth: this is
         what the SPA fetches to render the public-facing landing for the slug.
       parameters:

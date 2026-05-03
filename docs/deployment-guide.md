@@ -7,14 +7,14 @@ Swarm separates **platform code** (this repo, public) from **business configurat
 | Repo | Contains | Visibility |
 |------|----------|------------|
 | `swarm/` | Platform code, operator, templates, chat UI, K8s manifests | Public |
-| `swarm-config/` | Agent identities (SOUL.md), customer data, secrets, deploy script | Private |
+| `swarm-config/` (or `swarm-emai`/`swarm-cloud` after [[TASK-023]]) | Agent identities (SOUL.md), tenant data, secrets, deploy script | Private |
 
 ### Private config repo structure
 
 ```
-swarm-config/
+swarm-config/                # legacy name; renames to swarm-emai per TASK-024
 ├── agents/central/          # Central agent identity (SOUL.md, IDENTITY.md, etc.)
-├── customers/<slug>/        # Per-customer SOUL.md and config overrides
+├── customers/<slug>/        # Per-tenant SOUL.md and config overrides (legacy dir name)
 ├── secrets/.env             # API keys, tokens (gitignored)
 └── deploy.sh                # Deploys config to K8s cluster
 ```
@@ -40,7 +40,7 @@ cd swarm-config && ./deploy.sh
 
 ## Option 1: Docker Compose (Dev & Demo)
 
-Best for: Local testing, demos, 1-5 customer instances.
+Best for: Local testing, demos, 1-5 tenant instances.
 
 ### Prerequisites
 - Docker & Docker Compose v2
@@ -73,7 +73,7 @@ Access at `http://localhost:18789` — requires the gateway auth token from `age
 
 ### Dev overrides
 
-For debugging with exposed customer ports:
+For debugging with exposed tenant ports:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
@@ -137,7 +137,7 @@ sudo systemctl start swarm
 
 ## Option 3: Hetzner VPS (Terraform)
 
-Best for: Production, multi-customer, EU-hosted.
+Best for: Production, multi-tenant, EU-hosted.
 
 ### Prerequisites
 - Terraform 1.5+
@@ -170,7 +170,7 @@ Cloud-init automatically installs Docker, clones the repo, and starts all servic
 
 ## Option 4: Kubernetes + Swarm Operator (Recommended for Production)
 
-Best for: 10+ customer instances, auto-scaling, centrally managed provisioning.
+Best for: 10+ tenant instances, auto-scaling, centrally managed provisioning.
 
 ### Prerequisites
 - Kubernetes cluster (k3d for dev, k3s/managed K8s for prod)
@@ -212,21 +212,23 @@ make install
 make run  # Runs operator locally against cluster
 ```
 
-### Adding a customer
+### Adding a tenant
 
 ```bash
-# Via swarm-ctl
-swarm-ctl provision --customer "Customer Name" --project "Project Name"
+# Via swarm-ctl (--customer is the legacy CLI flag, pending the TASK-024 rename)
+swarm-ctl provision --customer "Tenant Name" --project "Project Name"
 
-# Or via kubectl
+# Or via kubectl. The customerName / customerSlug field names are the
+# legacy CRD contract (v1alpha1) — they keep their names until the
+# v1alpha2 bump bundled with TASK-012 + TASK-024.
 kubectl apply -f - <<EOF
 apiVersion: swarm.emai.io/v1alpha1
 kind: KaiInstance
 metadata:
-  name: kai-customer-slug
+  name: kai-tenant-slug
   namespace: swarm
 spec:
-  customerName: "Customer Name"
+  customerName: "Tenant Name"
   projectName: "Project Name"
   resources:
     requests: { memory: "1Gi", cpu: "100m" }
@@ -246,9 +248,10 @@ swarm-ctl resume <slug>           # Scale back to 1
 swarm-ctl delete <slug>           # Delete + cascade cleanup
 ```
 
-### Customer Chat UI
+### Chat UI
 
-The customer-facing web chat is at `web/customer-chat/`:
+The tenant-facing web chat is at `web/customer-chat/` (legacy dir name —
+renames to `web/chat/` in [[TASK-024]] Phase 4):
 
 ```bash
 # Dev server
@@ -256,7 +259,7 @@ cd web/customer-chat && npm install && npm run dev
 
 # Access:
 # http://localhost:3000/chat/<slug>
-# Sign in with the email + password configured in the customer's Team Access panel.
+# Sign in with the email + password configured on the Team page.
 ```
 
 For production, build and deploy as a Docker container:
@@ -267,10 +270,10 @@ kubectl apply -f kubernetes/customer-chat/
 ```
 
 ### Network isolation
-The operator creates per-customer NetworkPolicies:
-- Customer pods cannot reach each other
-- Customer pods can only reach DNS + HTTPS (for LLM API)
-- Only the central agent (role=central) can reach customer pods
+The operator creates per-tenant NetworkPolicies:
+- Tenant pods cannot reach each other
+- Tenant pods can only reach DNS + HTTPS (for LLM API)
+- Only the central agent (role=central) can reach tenant pods
 
 ### Important notes
 - OpenClaw needs ~1Gi+ RAM and 60s+ startup time
@@ -279,13 +282,13 @@ The operator creates per-customer NetworkPolicies:
 
 ---
 
-## Provisioning a new customer (Docker Compose — legacy)
+## Provisioning a new tenant (Docker Compose — legacy)
 
 ```bash
-./scripts/provision-customer.sh "Customer Name" "Project Name"
+./scripts/provision-customer.sh "Tenant Name" "Project Name"
 
 # Creates:
-# - customers/<slug>/agent/  — SOUL.md, HEARTBEAT.md, openclaw.json
+# - customers/<slug>/agent/  — SOUL.md, HEARTBEAT.md, openclaw.json (legacy dir name)
 # - customers/<slug>/headquarter/     — mc-initialized HQ repo
 # - docker/docker-compose.kai-<slug>.yml — Docker Compose override
 

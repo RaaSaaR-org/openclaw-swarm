@@ -1,6 +1,6 @@
 # OpenClaw Swarm
 
-Multi-instance deployment platform for [OpenClaw](https://docs.openclaw.ai) AI agents. Deploy isolated, customer-facing AI assistants on Kubernetes — each with its own persona, data, and network isolation.
+Multi-instance deployment platform for [OpenClaw](https://docs.openclaw.ai) AI agents. Deploy isolated, tenant-facing AI assistants on Kubernetes — each with its own persona, data, and network isolation.
 
 ## Architecture
 
@@ -68,7 +68,7 @@ cd docker && docker compose up -d
 
 ## KaiInstance CRD
 
-The operator watches `KaiInstance` custom resources and creates the full stack for each customer:
+The operator watches `KaiInstance` custom resources and creates the full stack for each tenant:
 
 ```yaml
 apiVersion: swarm.emai.io/v1alpha1
@@ -101,10 +101,10 @@ Each agent gets a workspace with these files:
 
 | File | Purpose | Customizable |
 |------|---------|-------------|
-| `SOUL.md` | Agent persona, tone, project context | Per-customer |
+| `SOUL.md` | Agent persona, tone, project context | Per-tenant |
 | `AGENTS.md` | Operating instructions, memory protocol | Template default |
-| `TOOLS.md` | Environment notes, workspace paths | Per-customer |
-| `HEARTBEAT.md` | Scheduled periodic tasks | Per-customer |
+| `TOOLS.md` | Environment notes, workspace paths | Per-tenant |
+| `HEARTBEAT.md` | Scheduled periodic tasks | Per-tenant |
 | `skills/mc/SKILL.md` | MissionControl CLI integration | Template default |
 
 Identity files on the PVC are **not overwritten** on pod restart — custom overrides from provisioning scripts are preserved.
@@ -142,11 +142,11 @@ swarm/
 
 ## Private Config Overlay
 
-For production deployments, create a sibling `swarm-config/` repo with:
-- Customer identity files (SOUL.md, USER.md per customer)
+For production deployments, create a sibling private overlay repo (e.g. `swarm-emai/` for EmAI's internal tenants, `swarm-cloud/` for the SaaS deployment — see [[TASK-023]]) with:
+- Tenant identity files (SOUL.md, USER.md per tenant)
 - K8s manifest overlays (sidecars, ingress, CronJobs)
 - Environment secrets and deploy scripts
-- KaiInstance CRDs per customer
+- KaiInstance CRDs per tenant
 
 The deploy script applies public base manifests first, then private overlays on top.
 

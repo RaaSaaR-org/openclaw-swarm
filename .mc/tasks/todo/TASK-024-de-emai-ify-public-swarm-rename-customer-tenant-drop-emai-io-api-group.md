@@ -78,19 +78,20 @@ This is the hygiene work that has to land before TASK-023 (three-repo split) can
 
 **Phase 1.A (additive K8s label) — done** on 2026-05-03. Operator-rendered child resources now carry `swarm.io/tenant=<slug>` alongside the legacy `emai.io/customer=<slug>`. New tooling can already select on the generic label; existing NetworkPolicy podSelectors and any kubectl filters in `swarm-emai`/`swarm-config` keep working unchanged. Test in `resources_test.go::TestCommonLabelsCarriesBothLegacyAndNewTenantLabel` asserts the contract so the legacy label can't accidentally disappear before the v1alpha2 bump.
 
+**Phase 1.B (docs sweep) — done** on 2026-05-03. Rewrote prose `customer` references in `README.md`, `docs/architecture.md`, `docs/customer-onboarding.md`, `docs/deployment-guide.md`, and one description in `docs/api/center.yaml` to use **tenant** / **user** / **workspace** instead. API contract names (the `customer-chat`/`customer-center`/`customer-template` directories, `customerName`/`customerSlug` CRD fields, `emai.io/customer` label, `--customer` CLI flag, `provision-customer.sh` filename) deliberately kept — they're locked to Phase 2-5 (CRD bump + dir renames + CLI rename, all coordinated with [[TASK-012]] v1alpha2 + a deploy). Audit confirms zero non-contract `customer` refs remain in public-repo prose. The `docs/customer-onboarding.md` filename itself is now the only non-contract leak; its content was rewritten as a tenant-onboarding checklist with a note that the doc long-term moves to `swarm-emai`.
+
 **Remaining phases:**
-- Phase 1.B (docs sweep): rewrite `docs/`, `README.md`, `CONTRIBUTING.md` references to "customer" that aren't literal API-contract names. Standalone, can ship anytime.
 - Phase 2 (CRD additive — `spec.tenantSlug`/`tenantName` alongside `customerSlug`/`customerName`; operator accepts either): bundle with [[TASK-012]] v1alpha2 work.
 - Phase 3 (`swarm-emai` / `swarm-config` mass rewrite): private-repo work, blocked on Phase 2.
 - Phase 4 (web app dir rename `customer-chat` → `chat`, `customer-center` → `center`): one-shot `git mv` + Dockerfile + CI matrix + image-name + K8s manifest update. Coordinated with a deploy because image names change.
 - Phase 5 (CRD API group `swarm.emai.io` → `swarm.io`): conversion webhook for one minor version, every YAML in every overlay updated. Bundle with [[TASK-012]].
 
 ## Acceptance Criteria
-- [ ] No file path, identifier, label, or CRD field in public `swarm` contains the literal word "customer" (verified by `grep -rn "customer" --exclude-dir=node_modules`)
-- [ ] CRD API group renamed; conversion webhook handles old-style manifests for one minor version
-- [ ] `swarm-emai` / `swarm-config` updated to use the new field/label/dir names
-- [ ] Docs and READMEs updated; no surviving "customer" references in public-repo docs
-- [ ] Existing internal tenants continue to reconcile correctly throughout the migration
+- [ ] No file path, identifier, label, or CRD field in public `swarm` contains the literal word "customer" (verified by `grep -rn "customer" --exclude-dir=node_modules`) — Phase 5 end state; today only API-contract names remain
+- [ ] CRD API group renamed; conversion webhook handles old-style manifests for one minor version (Phase 5)
+- [ ] `swarm-emai` / `swarm-config` updated to use the new field/label/dir names (Phase 3, private repo)
+- [x] Docs and READMEs updated; no surviving non-contract "customer" references in public-repo docs (Phase 1.B, 2026-05-03)
+- [ ] Existing internal tenants continue to reconcile correctly throughout the migration (verified at each phase boundary)
 - [x] Phase 1.A: additive `swarm.io/tenant=<slug>` label rendered on every operator-managed child resource (2026-05-03)
 
 ## Notes
