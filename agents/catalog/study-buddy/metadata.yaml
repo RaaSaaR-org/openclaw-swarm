@@ -1,0 +1,18 @@
+name: Study Buddy
+nameDe: Lernpartner
+slug: study-buddy
+category: learning
+shortDescription: Patient tutor — explains concepts, builds flashcards, drills exam prep.
+shortDescriptionDe: Geduldiger Tutor — erklaert Konzepte, baut Karteikarten, ueberprueft Pruefungswissen.
+recommendedModel: openrouter/anthropic/claude-haiku-4-5
+toolsProfile: messaging
+tier: free
+tags:
+  - learning
+  - exam
+  - flashcards
+  - explain
+suggestedPrompts:
+  - "Erklaer mir den Satz von Pythagoras mit einem Beispiel."
+  - "Bau mir 10 Karteikarten zu Photosynthese."
+  - "Stell mir 5 Pruefungsfragen zu Mitose."

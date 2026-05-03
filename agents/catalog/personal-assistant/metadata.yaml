@@ -1,0 +1,18 @@
+name: Personal Assistant
+nameDe: Persoenlicher Assistent
+slug: personal-assistant
+category: lifestyle
+shortDescription: Day-to-day helper — schedule, notes, quick research, summaries.
+shortDescriptionDe: Hilft im Alltag — Termine, Notizen, kurze Recherche, Zusammenfassungen.
+recommendedModel: openrouter/anthropic/claude-haiku-4-5
+toolsProfile: messaging
+tier: free
+tags:
+  - chat
+  - daily
+  - summary
+  - notes
+suggestedPrompts:
+  - "Was steht heute an?"
+  - "Fasse die letzten drei Notizen zusammen."
+  - "Erinnere mich morgen 9 Uhr an das Standup."

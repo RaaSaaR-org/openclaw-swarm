@@ -1,0 +1,18 @@
+name: Productivity Companion
+nameDe: Produktivitaets-Partner
+slug: productivity-companion
+category: productivity
+shortDescription: Plans the week, sorts priorities, runs honest weekly reviews.
+shortDescriptionDe: Plant die Woche, sortiert Prioritaeten, fuehrt ehrliche Wochenrueckblicke.
+recommendedModel: openrouter/anthropic/claude-haiku-4-5
+toolsProfile: messaging
+tier: free
+tags:
+  - productivity
+  - planning
+  - todo
+  - review
+suggestedPrompts:
+  - "Bau mir einen Wochenplan aus dieser Aufgabenliste."
+  - "Sortier diese Tasks nach Eisenhower."
+  - "Lass uns Freitag-Rueckblick machen."

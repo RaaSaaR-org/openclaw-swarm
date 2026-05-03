@@ -1,0 +1,18 @@
+name: Coding Helper
+nameDe: Code-Helfer
+slug: coding-helper
+category: development
+shortDescription: Reads code, explains it, suggests fixes, pairs on design choices.
+shortDescriptionDe: Liest Code, erklaert ihn, schlaegt Fixes vor, hilft bei Design-Fragen.
+recommendedModel: openrouter/anthropic/claude-haiku-4-5
+toolsProfile: coding
+tier: free
+tags:
+  - code
+  - debug
+  - review
+  - refactor
+suggestedPrompts:
+  - "Explain what this function does."
+  - "Why is my test failing?"
+  - "Refactor this for readability."

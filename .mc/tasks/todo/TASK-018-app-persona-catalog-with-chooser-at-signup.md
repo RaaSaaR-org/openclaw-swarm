@@ -4,7 +4,7 @@ aliases:
 - TASK-018
 title: App / persona catalog with chooser at signup
 slug: app-persona-catalog-with-chooser-at-signup
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # App / persona catalog with chooser at signup
@@ -57,8 +58,18 @@ Direct quote from the user's product framing: *"users can get some 'kai instance
 - Can a user have N apps as N workspaces (one app per workspace, TASK-014) or N apps inside one workspace (one workspace, multi-persona OpenClaw)? OpenClaw supports multiple agents in `agents.list[]`; both shapes are technically possible.
 - Do paid apps exist (e.g. specialized assistants behind a tier)?
 
+## Status
+
+**Phase 0 (catalog content) — done** on 2026-05-03. Six starter apps live under `agents/catalog/` with `SOUL.md.tmpl` + `metadata.yaml` + `icon.svg`, plus a `README.md` documenting the schema. Each app uses `{{WORKSPACE_NAME}}` / `{{USER_NAME}}` placeholders (no `CUSTOMER_*` per public-repo terminology rule). Apps: `personal-assistant`, `coding-helper`, `writing-coach`, `language-tutor`, `study-buddy`, `productivity-companion`.
+
+**Remaining phases blocked on upstream tasks:**
+- Phase 1 (operator catalog renderer): blocked on [[TASK-012]] CRD evolution adding `spec.appRef`.
+- Phase 2 (catalog page in customer-center): blocked on [[TASK-014]] (per-user view).
+- Phase 3 (signup `?app=<slug>` → KaiInstance with persona): blocked on [[TASK-013]].
+- Phase 4 (switch-app action): blocked on [[TASK-014]].
+
 ## Acceptance Criteria
-- [ ] At least 5 starter apps live under `agents/catalog/` with `SOUL.md` + `metadata.yaml` + `icon.svg`
+- [x] At least 5 starter apps live under `agents/catalog/` with `SOUL.md` + `metadata.yaml` + `icon.svg` (6 shipped 2026-05-03)
 - [ ] Catalog page renders all apps with category filter
 - [ ] Signup with `?app=<slug>` produces a KaiInstance with that persona
 - [ ] User can switch apps from customer-center, with confirmation prompt
