@@ -1,0 +1,177 @@
+openapi: 3.1.0
+info:
+  title: Swarm Admin Console API
+  version: 0.1.0
+  description: |
+    Platform-operator API for listing and controlling every `KaiInstance` in
+    the swarm namespace. Single shared `ADMIN_TOKEN` (Bearer); whoever has it
+    can list, inspect, suspend, and resume any tenant.
+
+    For self-serve / per-user signup see the onboarding API + the SaaS
+    direction in `.mc/` (TASK-013, TASK-014).
+  contact:
+    name: OpenClaw Swarm
+    url: https://docs.openclaw.ai
+
+servers:
+  - url: https://{host}
+    description: Per-deployment hostname
+    variables:
+      host:
+        default: admin.kai.example.com
+
+security:
+  - adminToken: []
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/instances:
+    get:
+      summary: List all KaiInstances in the namespace
+      responses:
+        "200":
+          description: List of instance summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InstanceSummary"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/KubernetesUnavailable" }
+
+  /api/instances/{name}:
+    get:
+      summary: Get raw KaiInstance object
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          description: Raw KaiInstance object (full spec + status)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Unstructured KaiInstance — see CRD schema for fields
+                additionalProperties: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/KubernetesUnavailable" }
+
+  /api/instances/{name}/suspend:
+    post:
+      summary: Suspend a KaiInstance (scale to 0, keep PVC)
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          description: Instance suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuspendedAck"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/KubernetesUnavailable" }
+
+  /api/instances/{name}/resume:
+    post:
+      summary: Resume a suspended KaiInstance (scale back to 1)
+      parameters:
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          description: Instance resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuspendedAck"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/KubernetesUnavailable" }
+
+components:
+  parameters:
+    Name:
+      name: name
+      in: path
+      required: true
+      description: KaiInstance name (typically `kai-<slug>`)
+      schema:
+        type: string
+        example: kai-acme
+
+  schemas:
+    InstanceSummary:
+      type: object
+      required: [name, customerName, projectName, customerSlug, phase, ready, suspended, creationTimestamp]
+      properties:
+        name: { type: string, example: kai-acme }
+        customerName: { type: string, example: Acme GmbH }
+        projectName: { type: string, example: Robot Pilot }
+        customerSlug: { type: string, example: acme }
+        model: { type: string, example: openrouter/anthropic/claude }
+        phase:
+          type: string
+          enum: [Provisioning, Running, Suspended, Failed, ""]
+        ready: { type: boolean }
+        suspended: { type: boolean }
+        gatewayURL: { type: string, example: kai-acme.emai-swarm.svc:18789 }
+        externalURL: { type: string, example: https://acme.kai.example.com }
+        creationTimestamp: { type: string, format: date-time }
+
+    SuspendedAck:
+      type: object
+      required: [name, suspended]
+      properties:
+        name: { type: string, example: kai-acme }
+        suspended: { type: boolean, example: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or wrong ADMIN_TOKEN
+      content:
+        text/plain:
+          schema: { type: string, example: unauthorized }
+    NotFound:
+      description: Instance not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Unhandled server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    KubernetesUnavailable:
+      description: Kubernetes client not configured
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  securitySchemes:
+    adminToken:
+      type: http
+      scheme: bearer
+      description: Single shared `ADMIN_TOKEN` from the deployment env var.

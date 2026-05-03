@@ -1,0 +1,148 @@
+openapi: 3.1.0
+info:
+  title: Swarm Status API
+  version: 0.1.0
+  description: |
+    Read-only public-friendly status for one tenant. Token-gated; same response
+    shape on auth fail / not found / wrong token, so probing slugs reveals nothing.
+
+    The token is the per-tenant gateway token (`KaiInstance.spec.gatewayAuth.token`),
+    settable via `swarm-ctl provision` or the onboarding API. It can be passed
+    either as `Authorization: Bearer <token>` or as the query parameter `?token=`.
+  contact:
+    name: OpenClaw Swarm
+    url: https://docs.openclaw.ai
+
+servers:
+  - url: https://{host}
+    description: Per-deployment hostname
+    variables:
+      host:
+        default: kai.example.com
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: Returns 200 if the server is up. No auth required.
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /api/status/{slug}:
+    get:
+      summary: Get tenant status
+      description: |
+        Returns the tenant's current status. The token is required; on any
+        failure path (missing token, bad slug, slug not found, wrong token)
+        the response is the same `401 unauthorized` so probing slugs reveals
+        nothing.
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - name: token
+          in: query
+          required: false
+          description: Gateway token (alternative to the Authorization header)
+          schema:
+            type: string
+      security:
+        - bearerToken: []
+        - {}
+      responses:
+        "200":
+          description: Status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicStatus"
+        "401":
+          description: Unauthorized (token missing, bad slug, slug not found, or wrong token)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Status backend unavailable (Kubernetes API not reachable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Lookup failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      description: DNS-safe tenant slug
+      schema:
+        type: string
+        pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        maxLength: 63
+        example: acme
+
+  schemas:
+    PublicStatus:
+      type: object
+      required: [customerName, projectName, slug, status, ready, message, lastUpdate]
+      properties:
+        customerName:
+          type: string
+          example: Acme GmbH
+        projectName:
+          type: string
+          example: Robot Pilot
+        slug:
+          type: string
+          example: acme
+        status:
+          type: string
+          enum: [online, setting-up, maintenance, issue, unknown]
+          description: |
+            online — agent is fully operational.
+            setting-up — pod still starting (Provisioning, or Running but not Ready).
+            maintenance — tenant suspended (`spec.suspended=true` or phase=Suspended).
+            issue — phase=Failed.
+            unknown — operator hasn't set a phase yet.
+        ready:
+          type: boolean
+          example: true
+        message:
+          type: string
+          description: Human-readable line for end users
+          example: All systems operational.
+        lastUpdate:
+          type: string
+          format: date-time
+          example: "2026-05-03T12:34:56Z"
+        gatewayURL:
+          type: string
+          description: Public ingress URL (only when external access is configured)
+          example: https://acme.kai.example.com
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: unauthorized
+
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: |
+        Per-tenant gateway token from `KaiInstance.spec.gatewayAuth.token`.
+        Same value also acceptable as the `?token=` query parameter.

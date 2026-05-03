@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Swarm Onboarding API
+  version: 0.1.0
+  description: |
+    Provisions new tenants by creating a `KaiInstance` CR. Today gated behind a
+    single shared `ADMIN_TOKEN`; the SaaS direction (`.mc/` TASK-013) opens this
+    up to public signup with email + password + CAPTCHA.
+
+    The returned `gatewayToken` is the value that ends up in
+    `KaiInstance.spec.gatewayAuth.token` and authenticates subsequent calls
+    to the status-page API and to the OpenClaw gateway over WebSocket.
+  contact:
+    name: OpenClaw Swarm
+    url: https://docs.openclaw.ai
+
+servers:
+  - url: https://{host}
+    description: Per-deployment hostname
+    variables:
+      host:
+        default: onboarding.kai.example.com
+
+security:
+  - adminToken: []
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/auth:
+    get:
+      summary: Verify ADMIN_TOKEN and report the namespace
+      description: Useful for the onboarding SPA to test credentials before submitting a provision request.
+      responses:
+        "200":
+          description: Token accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [namespace]
+                properties:
+                  namespace: { type: string, example: emai-swarm }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/instances:
+    post:
+      summary: Provision a new KaiInstance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionRequest"
+      responses:
+        "201":
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvisionResponse"
+        "400":
+          description: Invalid request body or validation failure
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: An instance with this slug already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Token generation or unhandled error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Kubernetes client not configured
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    ProvisionRequest:
+      type: object
+      required: [customerName, projectName, customerSlug]
+      properties:
+        customerName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Acme GmbH
+        projectName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Robot Pilot
+        customerSlug:
+          type: string
+          pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          maxLength: 63
+          example: acme
+        model:
+          type: string
+          description: OpenRouter model override; falls back to operator default if omitted
+          example: openrouter/anthropic/claude-3.5-sonnet
+        telegramSecretRef:
+          type: string
+          description: Name of an existing Secret holding `bot-token` for Telegram
+          example: kai-acme-telegram
+        externalAccess:
+          type: boolean
+          description: Default true — whether the operator should allocate an Ingress
+          example: true
+
+    ProvisionResponse:
+      type: object
+      required: [name, namespace, customerSlug, gatewayToken]
+      properties:
+        name: { type: string, example: kai-acme }
+        namespace: { type: string, example: emai-swarm }
+        customerSlug: { type: string, example: acme }
+        gatewayToken:
+          type: string
+          description: 48-hex-char gateway token. Persisted into KaiInstance spec; share with the tenant.
+          example: 1a2b3c4d5e6f7890abcdef0123456789abcdef0123456789
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or wrong ADMIN_TOKEN
+      content:
+        text/plain:
+          schema: { type: string, example: unauthorized }
+
+  securitySchemes:
+    adminToken:
+      type: http
+      scheme: bearer

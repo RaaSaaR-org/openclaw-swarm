@@ -1,0 +1,407 @@
+openapi: 3.1.0
+info:
+  title: Swarm Customer Center API
+  version: 0.1.0
+  description: |
+    Tenant-admin dashboard API. Per-tenant JWT cookie issued by the login
+    endpoint (`kai-session`); same cookie shape as customer-chat so a login on
+    one is honored by the other when they share an origin.
+
+    Bootstrap-admin flow: when the per-tenant users Secret is empty, the first
+    POST to `/api/center/{slug}/login` becomes initial setup — the submitter
+    becomes the admin user. After that, the same endpoint is the regular
+    login form.
+
+    All endpoints under `/api/center/{slug}/users` require the JWT cookie.
+    The login + logout + auth + read-center endpoints are the only ones
+    callable without a session.
+  contact:
+    name: OpenClaw Swarm
+    url: https://docs.openclaw.ai
+
+servers:
+  - url: https://{host}
+    description: Per-deployment hostname
+    variables:
+      host:
+        default: kai.example.com
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/center/{slug}:
+    get:
+      summary: Read the tenant center page
+      description: |
+        Returns customer name, project, status, channels, links, team, scope
+        markdown, heartbeat markdown, and recent briefings. No auth: this is
+        what the SPA fetches to render the public-facing landing for the slug.
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: Center payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CenterResponse"
+        "404":
+          description: No KaiInstance for this slug
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/center/{slug}/auth:
+    get:
+      summary: Report current auth state for the SPA
+      description: |
+        Always 200. Body says whether the caller is authenticated and whether
+        bootstrap-admin setup is needed (users Secret empty).
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: Auth state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthInfo"
+
+  /api/center/{slug}/login:
+    post:
+      summary: Sign in (or run bootstrap-admin on first use)
+      description: |
+        - If the users Secret is empty, this is the bootstrap path: the request
+          creates the first admin user and returns 201 with `setup: "true"`.
+        - Otherwise it's normal login: 200 on success, 401 on bad credentials.
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in (existing user)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+          headers:
+            Set-Cookie:
+              description: Issues `kai-session=<jwt>` (HttpOnly, Secure, SameSite=Lax, MaxAge=24h)
+              schema: { type: string }
+        "201":
+          description: Bootstrap admin created and logged in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400":
+          description: Invalid body or short bootstrap password (<8 chars)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Bootstrap race — another admin was just created. Retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Hash or session error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Center not provisioned (chat-bridge or users Secret missing)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/center/{slug}/logout:
+    post:
+      summary: Sign out
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "204":
+          description: Cleared the session cookie
+          headers:
+            Set-Cookie:
+              description: Issues an expired `kai-session` cookie (MaxAge=-1)
+              schema: { type: string }
+
+  /api/center/{slug}/users:
+    get:
+      summary: List users for this tenant
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: User list (no password hashes)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UserPublic" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500":
+          description: Read failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      summary: Add a new user
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPublic" }
+        "400":
+          description: Invalid email or short password (<8 chars)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/SecretsUnavailable" }
+
+  /api/center/{slug}/users/{email}:
+    delete:
+      summary: Remove a user (idempotent)
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - $ref: "#/components/parameters/Email"
+      responses:
+        "204":
+          description: User removed (or was already absent)
+        "400":
+          description: Invalid email format
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/SecretsUnavailable" }
+
+  /api/center/{slug}/users/{email}/password:
+    post:
+      summary: Reset a user's password
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - $ref: "#/components/parameters/Email"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 8, maxLength: 1024 }
+      responses:
+        "204":
+          description: Password updated
+        "400":
+          description: Invalid email or password constraints not met
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/SecretsUnavailable" }
+
+components:
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        maxLength: 63
+        example: acme
+    Email:
+      name: email
+      in: path
+      required: true
+      schema:
+        type: string
+        format: email
+        example: alice@acme.de
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: alice@acme.de }
+        password: { type: string, minLength: 8, example: correct horse battery staple }
+
+    LoginResponse:
+      type: object
+      required: [email, setup]
+      properties:
+        email: { type: string, format: email }
+        setup:
+          type: string
+          enum: ["true", "false"]
+          description: '"true" only on the bootstrap-admin path (HTTP 201); "false" otherwise.'
+
+    UserPublic:
+      type: object
+      required: [email, createdAt, passwordUpdatedAt]
+      properties:
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        passwordUpdatedAt: { type: string, format: date-time }
+
+    AuthInfo:
+      type: object
+      required: [authenticated, needsSetup]
+      properties:
+        authenticated: { type: boolean }
+        needsSetup:
+          type: boolean
+          description: True when users Secret is empty (next login will bootstrap an admin)
+        email: { type: string, format: email }
+        slug: { type: string }
+
+    CenterResponse:
+      type: object
+      required: [customerName, projectName, slug, status, statusLabel, links, channels, team, briefings]
+      properties:
+        customerName: { type: string }
+        projectName: { type: string }
+        slug: { type: string }
+        status:
+          type: string
+          enum: [online, setting-up, paused, issue, unknown]
+        statusLabel: { type: string }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/AppLink" }
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/Channel" }
+        team:
+          type: array
+          items: { $ref: "#/components/schemas/TeamMember" }
+        scope: { type: string, description: Markdown }
+        heartbeat: { type: string, description: Markdown }
+        briefings:
+          type: array
+          items: { $ref: "#/components/schemas/Briefing" }
+
+    AppLink:
+      type: object
+      required: [label, url]
+      properties:
+        label: { type: string }
+        url: { type: string, format: uri }
+        description: { type: string }
+        icon: { type: string }
+        external: { type: boolean }
+
+    Channel:
+      type: object
+      required: [kind, label]
+      properties:
+        kind: { type: string, enum: [webchat, telegram] }
+        label: { type: string }
+        hint: { type: string }
+
+    TeamMember:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        company: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        timezone: { type: string }
+        avatar: { type: string }
+
+    Briefing:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        date: { type: string }
+        excerpt: { type: string }
+        body: { type: string }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid session cookie
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Unhandled server error (hash, write, etc.)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    SecretsUnavailable:
+      description: Per-tenant Secret missing or unreachable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: kai-session
+      description: |
+        HS256 JWT signed with `kai-<slug>-chat-bridge.jwt-secret`.
+        Issued by the login endpoint, claims `{ sub: email, slug, exp, iat }`.
+        24h TTL, no server-side revocation in v1 (see TASK-009).

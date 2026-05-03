@@ -4,7 +4,7 @@ aliases:
 - TASK-008
 title: Publish OpenAPI specs for admin, center, onboarding and status APIs
 slug: publish-openapi-specs-for-admin-center-onboarding-and-status-apis
-status: backlog
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -19,6 +19,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Publish OpenAPI specs for admin, center, onboarding and status APIs

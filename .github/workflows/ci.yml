@@ -78,6 +78,17 @@ jobs:
         working-directory: web/${{ matrix.app }}/server
         run: go build -o /dev/null .
 
+  api-specs:
+    name: OpenAPI Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Spectral lint
+        uses: stoplightio/spectral-action@v0.8.13
+        with:
+          file_glob: 'docs/api/*.yaml'
+
   templates:
     name: Template Validation
     runs-on: ubuntu-latest
@@ -133,7 +144,7 @@ jobs:
   docker:
     name: Docker Build (${{ matrix.app }})
     runs-on: ubuntu-latest
-    needs: [operator, web, templates]
+    needs: [operator, web, templates, api-specs]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
