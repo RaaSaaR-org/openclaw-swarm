@@ -73,5 +73,99 @@ Unit tests cover validation, tier mapping, and signature-mismatch rejection (con
 - [ ] All webhook handlers are idempotent (Stripe retries them) (Phase 1)
 - [x] Phase 0: `pkg/stripe` SDK wrapper with checkout + subscription + webhook verification; integration-tested against real test mode (2026-05-03)
 
+## Stripe dashboard setup (prerequisite for Phase 1)
+
+To unblock Phase 1 (the actual web-app handler + checkout button), the
+human operator needs to do four things in the Stripe dashboard. Test
+mode keys (`pk_test_…` + `sk_test_…`) are sufficient for development.
+
+### 1. Products + recurring prices
+
+Free tier needs nothing (no subscription). Enterprise is custom (no
+fixed price). Two products to create:
+
+| Product name | Price | Recurring | Currency | `lookup_key` |
+|---|---|---|---|---|
+| **Kai Starter** | €10 | Monthly | EUR | `starter_monthly` |
+| **Kai Growth** | €30 | Monthly | EUR | `growth_monthly` |
+
+Set the **lookup_key** on each price (Dashboard → Product → Edit price
+→ "Used by your code"). That lets the deployment overlay reference
+prices by stable name across test/staging/prod instead of the random
+`price_…` IDs that differ per environment. Phase 1 onboarding code
+will resolve `lookup_key` → `price_…` ID at startup.
+
+### 2. Webhook endpoint
+
+**For Phase 1 dev work, use the Stripe CLI** — it tunnels production
+webhooks to localhost without needing a public URL:
+
+```sh
+brew install stripe/stripe-cli/stripe
+stripe login
+stripe listen --forward-to localhost:8080/api/billing/webhook
+```
+
+That prints a `whsec_…` secret used as `STRIPE_WEBHOOK_SECRET`.
+
+**For production** (when swarm-cloud is real and DNS exists): Dashboard
+→ Developers → Webhooks → Add endpoint → URL
+`https://kai.example.org/api/billing/webhook` → subscribe to:
+
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+Stripe generates a separate `whsec_…` per endpoint — that's the
+production secret (lives in the swarm-cloud Secret).
+
+### 3. Customer Portal config
+
+Dashboard → Settings → Billing → Customer portal → Configure:
+
+- Enable **cancellation**, **subscription update** (so users can swap
+  tiers), **payment method update**
+- Allow switching between Starter ↔ Growth
+- Add **business information** (legal name + support URL/email — required)
+- Save
+
+We don't build a "manage subscription" UI — call Stripe's
+`billingportal.Session` API to mint a one-time URL and redirect.
+
+### 4. Stripe Tax (recommended for EU)
+
+Dashboard → Tax → Get started:
+
+- Enable Stripe Tax
+- Add Germany as registered tax location (your VAT ID if you have one)
+- Once enabled, set `automatic_tax: true` on the checkout session and
+  Stripe handles per-country VAT automatically
+
+**Strongly recommended for EU B2C SaaS** — VAT compliance manually is
+brutal. Skip only if you already have an accountant doing cross-border
+B2C VAT.
+
+### What Phase 1 needs back from the operator
+
+When ready to start Phase 1, supply:
+
+1. The two `price_…` IDs (or confirm the `lookup_key` values above and
+   onboarding will resolve them at startup).
+2. The `whsec_…` from `stripe listen` (dev) or the production webhook
+   endpoint.
+3. Whether to enable Stripe Tax in Phase 1 or defer.
+
+Phase 1 will then build:
+
+- `POST /api/billing/webhook` handler (verifies signature → dispatches
+  by event type → updates User.tier + User.stripeCustomerId).
+- Customer-center "Upgrade to Starter / Growth" page that calls
+  `CreateCheckoutSession` and redirects.
+- Customer Portal redirect for cancel/swap/payment-method.
+- Tier sync: Stripe subscription → `users.UpdateTier` +
+  `users.UpdateStripeCustomerID`.
+
 ## Notes
 EU VAT / Mehrwertsteuer is non-trivial — strongly consider Paddle as merchant-of-record for the EU market unless we already have an accountant set up for cross-border B2C VAT.
