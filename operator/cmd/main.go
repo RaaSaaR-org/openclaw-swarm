@@ -199,10 +199,11 @@ func main() {
 	}
 
 	if err := (&controller.KaiInstanceReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		IngressDomain:    ingressDomain,
-		IngressTLSSecret: ingressTLSSecret,
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		IngressDomain:          ingressDomain,
+		IngressTLSSecret:       ingressTLSSecret,
+		PooledOpenRouterSecret: os.Getenv("SWARM_POOLED_OPENROUTER_SECRET"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "KaiInstance")
 		os.Exit(1)

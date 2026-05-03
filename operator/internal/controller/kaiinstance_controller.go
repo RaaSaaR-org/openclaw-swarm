@@ -41,6 +41,13 @@ type KaiInstanceReconciler struct {
 	Scheme           *runtime.Scheme
 	IngressDomain    string // from env INGRESS_DOMAIN, default "kai.emai.dev"
 	IngressTLSSecret string // from env INGRESS_TLS_SECRET, default "kai-emai-dev-tls"
+
+	// PooledOpenRouterSecret, when set, makes every reconciled KaiInstance read its
+	// OPENROUTER_API_KEY from one shared Secret in the same namespace instead of
+	// the per-tenant `kai-<slug>-openrouter` Secret. Empty preserves the original
+	// per-tenant wiring (BYOK-shaped) for backwards-compat with existing deploys.
+	// Set via env var SWARM_POOLED_OPENROUTER_SECRET — see PROP-002 (pooled-only).
+	PooledOpenRouterSecret string
 }
 
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances,verbs=get;list;watch;create;update;patch;delete
@@ -254,7 +261,7 @@ func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1al
 
 // reconcileDeployment creates or updates the agent Deployment.
 func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug, hash string) error {
-	desired := buildDeployment(kai, slug, hash)
+	desired := buildDeployment(kai, slug, hash, deploymentOpts{PooledOpenRouterSecret: r.PooledOpenRouterSecret})
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
 	}

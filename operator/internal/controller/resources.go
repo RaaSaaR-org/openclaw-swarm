@@ -91,8 +91,19 @@ func buildPVC(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.PersistentVol
 	}
 }
 
+// deploymentOpts carries reconciler-level configuration that influences how a
+// KaiInstance Deployment is rendered. Kept separate from KaiInstance.Spec so
+// it stays a deploy-time choice (env var on the operator) rather than a
+// per-tenant CRD field.
+type deploymentOpts struct {
+	// PooledOpenRouterSecret, when non-empty, overrides the default per-tenant
+	// `kai-<slug>-openrouter` Secret with a single shared Secret in the same
+	// namespace. Empty preserves the legacy per-tenant wiring.
+	PooledOpenRouterSecret string
+}
+
 // buildDeployment creates the Deployment for the Kai agent.
-func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.Deployment {
+func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts deploymentOpts) *appsv1.Deployment {
 	labels := commonLabels(slug)
 	name := childName(slug)
 
@@ -106,10 +117,13 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 		model = kai.Spec.Model
 	}
 
-	// OpenRouter key: per-customer secret kai-<slug>-openrouter, key "api-key".
-	// onboard.sh creates this for every customer (copies from per-customer .env if
-	// OPENROUTER_API_KEY is set, else from global swarm-secrets/openrouter-api-key).
-	// This isolates rate limits per customer.
+	// OpenRouter key source: pooled (one Secret for all tenants) when configured
+	// via SWARM_POOLED_OPENROUTER_SECRET; otherwise fall back to the per-tenant
+	// `kai-<slug>-openrouter` Secret that onboard.sh historically created.
+	openRouterSecret := opts.PooledOpenRouterSecret
+	if openRouterSecret == "" {
+		openRouterSecret = fmt.Sprintf("kai-%s-openrouter", slug)
+	}
 	env := []corev1.EnvVar{
 		{Name: "NODE_OPTIONS", Value: "--max-old-space-size=1536"},
 		{Name: "OPENCLAW_AGENT", Value: name},
@@ -119,7 +133,7 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 			Name: "OPENROUTER_API_KEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: fmt.Sprintf("kai-%s-openrouter", slug)},
+					LocalObjectReference: corev1.LocalObjectReference{Name: openRouterSecret},
 					Key:                  "api-key",
 				},
 			},

@@ -4,7 +4,7 @@ aliases:
 - TASK-019
 title: Per-user LLM cost strategy (BYOK vs pooled key + metering)
 slug: per-user-llm-cost-strategy-byok-vs-pooled-key-metering
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # Per-user LLM cost strategy (BYOK vs pooled key + metering)
@@ -52,10 +53,22 @@ The single largest variable cost in this SaaS is the LLM inference bill. Recent 
 - Exact daily message cap on free tier: 50? 100? 200? Calibrate from early usage data.
 - Per-tier paid model: Haiku 4.5 or Gemini Flash 2.5? Both are similarly priced; pick after comparing on actual EmAI persona prompts.
 
+## Status
+
+**Phase 0 (operator pooled-key support) — done** on 2026-05-03. Operator now reads `SWARM_POOLED_OPENROUTER_SECRET` env var; when set, every reconciled KaiInstance points its `OPENROUTER_API_KEY` env var at that one Secret instead of `kai-<slug>-openrouter`. When unset, the legacy per-tenant fallback preserves backwards compatibility for existing deploys. The pooled Secret itself is provisioned by the deployment overlay (`swarm-cloud` / `swarm-emai`), not the public swarm repo. Documented in `operator/config/manager/manager.yaml` (commented opt-in block) and `docs/architecture.md`.
+
+**Remaining phases blocked on upstream tasks:**
+- Phase 1 (per-tier model selection): blocked on [[TASK-012]] adding `spec.tier` to the KaiInstance CRD.
+- Phase 2 (usage tracker cron — polls OpenRouter activity API per workspace, writes to a per-slug ConfigMap): can ship without TASK-014 if usage stays workspace-scoped, but the meaningful per-user view needs the User entity.
+- Phase 3 (auto-suspend at cap — cron patches `spec.suspended=true` when the workspace exceeds its daily cap): requires Phase 2.
+- Phase 4 (Prometheus per-user token-usage metric + Grafana dashboard): blocked on [[TASK-014]] for the user-id label.
+- Phase 5 (80%-of-cap email alert): blocked on [[TASK-020]] (pkg/email + Resend).
+
 ## Acceptance Criteria
-- [ ] Strategy decision documented (proposal `PROP-002-llm-cost-strategy.md` or similar)
+- [x] Strategy decision documented (see [[PROP-002]] — pooled-only locked 2026-05-03)
+- [x] Operator wiring supports pooled Secret (Phase 0, 2026-05-03)
 - [ ] If pooled: per-user daily token budget enforced; instance auto-suspends at cap; user gets email at 80% (depends TASK-020)
-- [ ] If BYOK: encrypted key storage + customer-center UI to add/rotate keys
+- [ ] If BYOK: encrypted key storage + customer-center UI to add/rotate keys (deferred per [[PROP-002]] — BYOK rejected for v1)
 - [ ] Per-user token usage metric exposed to Prometheus
 - [ ] Cost-per-active-user dashboard exists (Grafana or similar)
 

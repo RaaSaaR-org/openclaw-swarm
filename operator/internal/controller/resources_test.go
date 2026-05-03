@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,7 +98,7 @@ func TestBuildPVC(t *testing.T) {
 
 func TestBuildDeployment(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
-	deploy := buildDeployment(kai, "test", "abc123")
+	deploy := buildDeployment(kai, "test", "abc123", deploymentOpts{})
 
 	if deploy.Name != "kai-test" {
 		t.Errorf("Deployment name = %q, want 'kai-test'", deploy.Name)
@@ -181,7 +182,7 @@ func TestBuildDeploymentSuspended(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 	kai.Spec.Suspended = true
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	if *deploy.Spec.Replicas != 0 {
 		t.Errorf("suspended deployment should have 0 replicas, got %d", *deploy.Spec.Replicas)
@@ -192,7 +193,7 @@ func TestBuildDeploymentCustomModel(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 	kai.Spec.Model = "openrouter/anthropic/claude-sonnet"
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	// Find OPENCLAW_MODEL env var
 	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
@@ -209,7 +210,7 @@ func TestBuildDeploymentCustomModel(t *testing.T) {
 func TestBuildDeploymentDefaultModel(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "OPENCLAW_MODEL" {
@@ -228,7 +229,7 @@ func TestBuildDeploymentTelegram(t *testing.T) {
 		BotTokenSecretRef: "kai-test-telegram",
 	}
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	// Should have TELEGRAM_BOT_TOKEN env var
 	found := false
@@ -245,10 +246,52 @@ func TestBuildDeploymentTelegram(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentOpenRouterDefaultPerSlugSecret(t *testing.T) {
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+
+	got := openRouterSecretRef(t, deploy)
+	if got != "kai-test-openrouter" {
+		t.Errorf("default OPENROUTER_API_KEY secret ref = %q, want kai-test-openrouter (per-slug fallback)", got)
+	}
+}
+
+func TestBuildDeploymentOpenRouterPooledSecret(t *testing.T) {
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{PooledOpenRouterSecret: "swarm-pooled-openrouter"})
+
+	got := openRouterSecretRef(t, deploy)
+	if got != "swarm-pooled-openrouter" {
+		t.Errorf("pooled OPENROUTER_API_KEY secret ref = %q, want swarm-pooled-openrouter", got)
+	}
+	// And critically: a different slug must point at the same shared Secret.
+	other := buildDeployment(kai, "betaco", "hash", deploymentOpts{PooledOpenRouterSecret: "swarm-pooled-openrouter"})
+	if openRouterSecretRef(t, other) != "swarm-pooled-openrouter" {
+		t.Error("pooled secret must be shared across slugs")
+	}
+}
+
+func openRouterSecretRef(t *testing.T, deploy *appsv1.Deployment) string {
+	t.Helper()
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "OPENROUTER_API_KEY" {
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Fatalf("OPENROUTER_API_KEY must come from a SecretKeyRef, got %+v", env.ValueFrom)
+			}
+			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+				t.Errorf("OPENROUTER_API_KEY key = %q, want api-key", env.ValueFrom.SecretKeyRef.Key)
+			}
+			return env.ValueFrom.SecretKeyRef.LocalObjectReference.Name
+		}
+	}
+	t.Fatal("OPENROUTER_API_KEY env var not found")
+	return ""
+}
+
 func TestBuildDeploymentNoTelegram(t *testing.T) {
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "TELEGRAM_BOT_TOKEN" {
@@ -268,7 +311,7 @@ func TestBuildDeploymentCustomResources(t *testing.T) {
 		},
 	}
 
-	deploy := buildDeployment(kai, "test", "hash")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	mem := deploy.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]
 	if mem.String() != "1Gi" {

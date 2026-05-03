@@ -70,6 +70,15 @@ spec:
             value: "kai.emai.dev"
           - name: INGRESS_TLS_SECRET
             value: "kai-emai-dev-tls"
+          # SWARM_POOLED_OPENROUTER_SECRET, when set, makes every reconciled
+          # KaiInstance read its OPENROUTER_API_KEY from this single Secret in
+          # the same namespace instead of the per-tenant kai-<slug>-openrouter
+          # Secret. This is the SaaS-tier wiring (PROP-002 pooled-only). Leave
+          # unset to keep the historical per-tenant BYOK-shaped fallback.
+          # The Secret itself is provisioned by the deployment overlay
+          # (swarm-cloud / swarm-emai), not the public swarm repo.
+          # - name: SWARM_POOLED_OPENROUTER_SECRET
+          #   value: "swarm-pooled-openrouter"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true

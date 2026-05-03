@@ -118,7 +118,7 @@ A sibling **private** repo (today: `swarm-config`; the `.mc/` SaaS-direction wor
 
 - Per-tenant `KaiInstance` manifests (with concrete customer names, slugs, gateway tokens)
 - Per-tenant `SOUL.md` / `USER.md` / `HEARTBEAT.md` overrides — the customer-template in `agents/` is the default; the private overlay overrides per-tenant
-- Production secrets (`.env`, OpenRouter keys, telegram bot tokens)
+- Production secrets (`.env`, OpenRouter keys, telegram bot tokens). The OpenRouter key can be wired two ways: (1) per-tenant `kai-<slug>-openrouter` Secret (legacy / BYOK-shaped, the public-repo default) or (2) one shared **pooled** Secret in the operator namespace, selected by setting `SWARM_POOLED_OPENROUTER_SECRET` on the operator Deployment (PROP-002 — pooled-only is the SaaS direction; one platform key, all tenants share it, per-tier daily caps land in a future phase of TASK-019).
 - K8s overlay with the `ADMIN_TOKEN` and ingress hostnames for the public surfaces
 - Deploy scripts (`deploy.sh`, `onboard.sh`)
 
