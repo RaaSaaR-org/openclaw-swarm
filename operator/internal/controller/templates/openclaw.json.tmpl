@@ -2,8 +2,7 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "${OPENCLAW_MODEL}",
-        "fallback": "openrouter/google/gemini-2.0-flash-exp:free"
+        "primary": "${OPENCLAW_MODEL}"
       },
       "workspace": "/home/node/.openclaw/workspace",
       "skipBootstrap": true,
@@ -68,5 +67,21 @@
   },
   "tools": {
     "profile": "coding"
+  },
+  "plugins": {
+    "entries": {
+      "bonjour": {"enabled": false},
+      "browser": {"enabled": false},
+      "device-pair": {"enabled": false},
+      "file-transfer": {"enabled": false},
+      "phone-control": {"enabled": false},
+      "talk-voice": {"enabled": false}
+    }
+  },
+  "auth": {
+    "cooldowns": {
+      "rateLimitedProfileRotations": 0,
+      "overloadedProfileRotations": 0
+    }
   }
 }

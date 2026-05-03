@@ -106,7 +106,10 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 		model = kai.Spec.Model
 	}
 
-	// Container env vars
+	// OpenRouter key: per-customer secret kai-<slug>-openrouter, key "api-key".
+	// onboard.sh creates this for every customer (copies from per-customer .env if
+	// OPENROUTER_API_KEY is set, else from global swarm-secrets/openrouter-api-key).
+	// This isolates rate limits per customer.
 	env := []corev1.EnvVar{
 		{Name: "NODE_OPTIONS", Value: "--max-old-space-size=1536"},
 		{Name: "OPENCLAW_AGENT", Value: name},
@@ -116,8 +119,8 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 			Name: "OPENROUTER_API_KEY",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-					Key:                  "openrouter-api-key",
+					LocalObjectReference: corev1.LocalObjectReference{Name: fmt.Sprintf("kai-%s-openrouter", slug)},
+					Key:                  "api-key",
 				},
 			},
 		},
