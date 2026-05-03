@@ -1,0 +1,24 @@
+# Single wildcard cert that covers every per-tenant subdomain. The operator's
+# per-tenant Ingress references the secretName via its TLS section
+# (`spec.tls[].secretName: kai-emai-io-tls`); the wildcard means we mint
+# exactly one cert no matter how many tenants we provision.
+#
+# Override `commonName` and `dnsNames` in the deployment overlay to match
+# whichever sending domain the SaaS lives at (`*.kai.emai.io` for EmAI's
+# production SaaS, `*.kai.example.org` for a fork).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kai-wildcard
+  namespace: emai-swarm
+spec:
+  secretName: kai-emai-io-tls  # OVERRIDE; must match operator IngressTLSSecret env
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: "*.kai.example.org"   # OVERRIDE in deployment overlay
+  dnsNames:
+    - "*.kai.example.org"           # OVERRIDE in deployment overlay
+    - "kai.example.org"             # apex; covers the marketing/dashboard root
+  # 90-day cert, renewed at day 60 by cert-manager (default 1/3-of-lifetime
+  # threshold). No need to set duration/renewBefore explicitly.

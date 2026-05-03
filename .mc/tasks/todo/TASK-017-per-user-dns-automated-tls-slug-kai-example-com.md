@@ -4,7 +4,7 @@ aliases:
 - TASK-017
 title: Per-user DNS + automated TLS (<slug>.kai.example.com)
 slug: per-user-dns-automated-tls-slug-kai-example-com
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -20,6 +20,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # Per-user DNS + automated TLS (<slug>.kai.example.com)
@@ -53,12 +54,31 @@ For a public SaaS, each user's chat needs its own URL — typically `<slug>.kai.
 - Hetzner DNS webhook provider: pick the maintained one (cert-manager-webhook-hetzner is the de facto, but check its release cadence before committing).
 - Apex `kai.emai.io` itself (the marketing site, [[TASK-022]]) gets a separate non-wildcard cert; that's standard, just call it out in the deploy doc.
 
+## Status
+
+**Phase 0 (cert-manager + external-dns manifests + docs) — done** on 2026-05-03. Public swarm repo now ships:
+- `kubernetes/cert-manager/` — `cluster-issuer.yml` + `cluster-issuer-staging.yml` + `wildcard-certificate.yml` (one wildcard `*.<domain>` Certificate via Let's Encrypt DNS-01 against Hetzner DNS) + README walking through the cert-manager + `cert-manager-webhook-hetzner` install flow with staging-first guidance.
+- `kubernetes/external-dns/` — Namespace + RBAC + Deployment with the Hetzner provider (v0.18.0), `--policy=upsert-only` so it never deletes records on its own, and a README clarifying that the wildcard A record is one-time manual.
+- Updated `docs/architecture.md` with a new TLS+DNS section explaining the wildcard-cert + per-slug-subdomain plan, the rate-limit rationale, and why today's path-based ingress hasn't flipped yet.
+
+All manifests are inert until applied by the deployment overlay (`swarm-cloud` / `swarm-emai`); the public repo carries placeholder domains (`kai.example.org`) and references a Hetzner DNS API token Secret that the overlay creates from a private value.
+
+**Open questions — closed:**
+- Hetzner DNS webhook provider: `cert-manager-webhook-hetzner` (vadimkim) — the de-facto choice, documented as the install command in `kubernetes/cert-manager/README.md`.
+- Apex cert: covered alongside the wildcard (`dnsNames` includes both `*.<domain>` and the apex) — one cert, two SANs.
+
+**Remaining phases blocked on coordinated deploy:**
+- Phase 1 (operator Ingress shape): flip `buildIngress` from path-based (`<domain>/ws/<slug>`) to host-based (`<slug>.<domain>/ws`). This changes the URL contract for every existing tenant; needs to land with the `swarm-emai` overlay updating each tenant's chat-bridge config + a coordinated cutover. Tracked as a follow-up phase.
+- Phase 2 (operator status): `KaiInstance.status.externalURL` populated only after Ingress is admitted. Lands with Phase 1.
+- Phase 3 (cleanup verification): with wildcard cert + wildcard DNS shared across all tenants, per-slug deletion already works — Ingress goes via ownerRef cascade ([[TASK-003]] already handled). Phase 3 is just the verification check on the cluster after Phase 1 lands.
+
 ## Acceptance Criteria
-- [ ] After provisioning, `https://<slug>.kai.example.com` serves a valid cert
-- [ ] DNS record is created automatically (no manual step)
-- [ ] `status.externalURL` is only set when both Ingress and cert are ready
-- [ ] Cert renewal is automated and verified (set test cert TTL low and verify renewal happens)
-- [ ] Ingress + DNS + cert all clean up on KaiInstance deletion
+- [ ] After provisioning, `https://<slug>.kai.example.com` serves a valid cert (Phase 1+)
+- [ ] DNS record is created automatically (no manual step) (external-dns wired in Phase 0; activates after the overlay deploy)
+- [ ] `status.externalURL` is only set when both Ingress and cert are ready (Phase 2)
+- [ ] Cert renewal is automated and verified (set test cert TTL low and verify renewal happens) (post-Phase 0 deploy verification)
+- [ ] Ingress + DNS + cert all clean up on KaiInstance deletion (Ingress already cleans via ownerRef per [[TASK-003]]; wildcard cert + wildcard DNS are shared and deliberately survive deletion)
+- [x] Phase 0: cert-manager + external-dns manifests + docs shipped in the public swarm repo (2026-05-03)
 
 ## Notes
 Pair with TASK-003 (deletion cleanup) so removed customers don't leave orphan DNS records and stale cert-manager Certificate resources.

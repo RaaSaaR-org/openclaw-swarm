@@ -128,6 +128,19 @@ The seam is intentional: anyone can fork `swarm` and run their own platform with
 
 ---
 
+## TLS + DNS
+
+For SaaS the goal is per-tenant URLs (`<slug>.kai.example.org`) with a valid TLS cert. The wiring lives in `kubernetes/cert-manager/` and `kubernetes/external-dns/`:
+
+- **One wildcard certificate** (`*.<domain>`) issued via Let's Encrypt **DNS-01** against Hetzner DNS using the `cert-manager-webhook-hetzner` provider. Wildcard chosen over per-slug certs to dodge Let's Encrypt's 50-certs-per-week-per-registered-domain rate limit (which would cap signup at ~7/day) and to keep tenant slugs out of CT logs (privacy win for B2C).
+- **Wildcard DNS A record** (`*.<domain>` → ingress controller external IP) is a one-time manual record in Hetzner; `external-dns` keeps everything under the zone in sync from then on (including any future bring-your-own-domain CNAMEs).
+- **Today the operator-rendered Ingress uses a shared host with a path-based route** (`<domain>/ws/<slug>`) — see `operator/internal/controller/resources.go::buildIngress`. The wildcard cert + DNS infra ships ahead so the deploy can apply them without behavior change. The flip to per-slug subdomain shape is a coordinated deploy because it changes the URL contract for every existing tenant; tracked in TASK-017's later phases.
+- **Custom domains** (paid-tier "bring your own `assistant.acme.de`") are deferred to v2 with HTTP-01 — clean separation, no early commitment.
+
+Deploy steps live in `kubernetes/cert-manager/README.md` (cert-manager + webhook + ClusterIssuer flow) and `kubernetes/external-dns/README.md` (Hetzner provider). The Hetzner DNS API token is provisioned by the deployment overlay (`swarm-cloud` / `swarm-emai`), not the public repo.
+
+---
+
 ## Where to look next
 
 - **Provisioning a tenant by hand** → `scripts/swarm-ctl.sh` (CLI) + `scripts/swarm-ctl.sh info <slug>` for the post-provision URL/token summary

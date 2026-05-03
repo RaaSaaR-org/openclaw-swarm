@@ -1,0 +1,27 @@
+# Let's Encrypt PROD ClusterIssuer using DNS-01 against Hetzner DNS.
+# The operator-generated Ingress per KaiInstance carries the annotation
+# `cert-manager.io/cluster-issuer: letsencrypt-prod` — this resource is what
+# fulfils that annotation. Keep the name "letsencrypt-prod" in sync with
+# operator/internal/controller/resources.go::buildIngress.
+#
+# DO NOT switch to prod before staging has issued at least one cert
+# successfully — Let's Encrypt's prod rate limit (50 certs/week per
+# registered domain) eats your retries on misconfigured DNS.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@kai.example.org  # OVERRIDE in deployment overlay
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          webhook:
+            groupName: acme.kai.example.org  # OVERRIDE in deployment overlay
+            solverName: hetzner
+            config:
+              secretName: hetzner-dns-token
+              apiUrl: https://dns.hetzner.com/api/v1

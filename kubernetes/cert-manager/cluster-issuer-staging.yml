@@ -1,0 +1,24 @@
+# Let's Encrypt STAGING ClusterIssuer using DNS-01 against Hetzner DNS.
+# Use this first to avoid hitting prod rate limits during setup; staging
+# certs aren't trusted by browsers but the issuance flow is identical.
+#
+# Webhook reference: vadimkim/cert-manager-webhook-hetzner
+# Token Secret: kubectl -n cert-manager create secret generic hetzner-dns-token --from-literal=api-token='...'
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ops@kai.example.org  # OVERRIDE in deployment overlay
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - dns01:
+          webhook:
+            groupName: acme.kai.example.org  # OVERRIDE in deployment overlay
+            solverName: hetzner
+            config:
+              secretName: hetzner-dns-token
+              apiUrl: https://dns.hetzner.com/api/v1
