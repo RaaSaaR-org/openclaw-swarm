@@ -1,0 +1,60 @@
+# MissionControl Configuration (embedded mode)
+# Stored in .mc/ alongside an existing project.
+
+site:
+  name: swarm
+  description: Project knowledge base
+
+paths:
+  meetings: meetings/
+  research: research/
+  tasks: tasks/
+  sprints: sprints/
+  proposals: proposals/
+  data: data/
+  templates: templates/
+  archive: archive/
+
+id_prefixes:
+  meeting: MTG
+  research: RES
+  task: TASK
+  sprint: SPR
+  proposal: PROP
+
+statuses:
+  meeting:
+    - scheduled
+    - completed
+    - cancelled
+  research:
+    - draft
+    - in-progress
+    - final
+    - outdated
+  task:
+    - backlog
+    - todo
+    - in-progress
+    - review
+    - done
+    - cancelled
+  sprint:
+    - planning
+    - active
+    - review
+    - completed
+    - cancelled
+  proposal:
+    - draft
+    - proposed
+    - accepted
+    - rejected
+    - superseded
+    - withdrawn
+
+priorities:
+  1: critical
+  2: high
+  3: medium
+  4: low
