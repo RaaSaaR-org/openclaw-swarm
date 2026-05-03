@@ -4,7 +4,7 @@ aliases:
 - TASK-003
 title: 'Operator: clean up per-customer Secrets on KaiInstance deletion'
 slug: operator-clean-up-per-customer-secrets-on-kaiinstance-deletion
-status: backlog
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -18,6 +18,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Operator: clean up per-customer Secrets on KaiInstance deletion

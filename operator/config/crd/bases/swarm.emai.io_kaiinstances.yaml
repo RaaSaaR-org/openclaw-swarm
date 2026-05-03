@@ -258,6 +258,13 @@ spec:
               gatewayURL:
                 description: gatewayURL is the in-cluster URL for the agent's gateway.
                 type: string
+              observedGeneration:
+                description: |-
+                  observedGeneration reflects the metadata.generation that the operator last
+                  successfully reconciled. observedGeneration < generation means the operator
+                  has not yet processed the latest spec change.
+                format: int64
+                type: integer
               phase:
                 description: phase is the current lifecycle phase.
                 enum:

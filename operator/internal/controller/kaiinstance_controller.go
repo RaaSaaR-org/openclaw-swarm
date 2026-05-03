@@ -65,7 +65,32 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// 2. Resolve the customer slug
+	// 2. Handle deletion (must precede slug derivation — deletion doesn't need a slug).
+	// The finalizer holds the object until the operator confirms cleanup is done.
+	// Today cleanup is a no-op (ownerRef cascade does the work); the hook reserves
+	// space for future SaaS pre-delete logic (GDPR DSAR snapshot, billing, audit).
+	if !kai.ObjectMeta.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer) {
+			log.Info("finalizing KaiInstance", "name", kai.Name)
+			controllerutil.RemoveFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)
+			if err := r.Update(ctx, &kai); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// 3. Ensure the finalizer is present. Re-queue immediately after adding it so
+	// the next reconcile sees the updated object and proceeds with provisioning.
+	if !controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer) {
+		controllerutil.AddFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)
+		if err := r.Update(ctx, &kai); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// 4. Resolve the customer slug
 	slug := kai.Spec.CustomerSlug
 	if slug == "" {
 		slug = slugify(kai.Spec.CustomerName)
@@ -146,7 +171,12 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		kai.Status.Phase = swarmv1alpha1.PhaseRunning
 	}
 
-	// 8. Update status
+	// 8. Mark this generation as fully observed (only on the successful path —
+	// setFailed paths leave ObservedGeneration at the last good generation, so
+	// callers can detect "still working on the new spec").
+	kai.Status.ObservedGeneration = kai.Generation
+
+	// 9. Update status
 	if err := r.Status().Update(ctx, &kai); err != nil {
 		return ctrl.Result{}, err
 	}

@@ -21,8 +21,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,59 +36,130 @@ import (
 )
 
 var _ = Describe("KaiInstance Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+	const resourceName = "test-resource"
 
-		ctx := context.Background()
+	ctx := context.Background()
+	typeNamespacedName := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+	newReconciler := func() *KaiInstanceReconciler {
+		return &KaiInstanceReconciler{
+			Client:           k8sClient,
+			Scheme:           k8sClient.Scheme(),
+			IngressDomain:    "kai.emai.dev",
+			IngressTLSSecret: "kai-emai-dev-tls",
 		}
-		kaiinstance := &swarmv1alpha1.KaiInstance{}
+	}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind KaiInstance")
-			err := k8sClient.Get(ctx, typeNamespacedName, kaiinstance)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &swarmv1alpha1.KaiInstance{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: swarmv1alpha1.KaiInstanceSpec{
-						CustomerName: "Test Customer",
-						ProjectName:  "Test Project",
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &swarmv1alpha1.KaiInstance{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+	// reconcileUntilFinalized loops until the object is gone (finalizer removed +
+	// envtest GC). Bounded by attempt count so a regression doesn't hang the suite.
+	reconcileUntilFinalized := func(r *KaiInstanceReconciler) {
+		for i := 0; i < 5; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KaiInstance")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &KaiInstanceReconciler{
-				Client:           k8sClient,
-				Scheme:           k8sClient.Scheme(),
-				IngressDomain:    "kai.emai.dev",
-				IngressTLSSecret: "kai-emai-dev-tls",
+			var kai swarmv1alpha1.KaiInstance
+			err = k8sClient.Get(ctx, typeNamespacedName, &kai)
+			if errors.IsNotFound(err) {
+				return
 			}
+		}
+	}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
+	BeforeEach(func() {
+		By("creating the KaiInstance resource")
+		resource := &swarmv1alpha1.KaiInstance{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: "default",
+			},
+			Spec: swarmv1alpha1.KaiInstanceSpec{
+				CustomerName: "Test Customer",
+				ProjectName:  "Test Project",
+			},
+		}
+		err := k8sClient.Get(ctx, typeNamespacedName, resource)
+		if err != nil && errors.IsNotFound(err) {
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		}
+	})
+
+	AfterEach(func() {
+		By("deleting the KaiInstance and draining the finalizer")
+		var resource swarmv1alpha1.KaiInstance
+		err := k8sClient.Get(ctx, typeNamespacedName, &resource)
+		if err != nil && errors.IsNotFound(err) {
+			return
+		}
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Delete(ctx, &resource)).To(Succeed())
+		reconcileUntilFinalized(newReconciler())
+	})
+
+	It("adds the finalizer on the first reconcile", func() {
+		r := newReconciler()
+		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+		Expect(err).NotTo(HaveOccurred())
+
+		var kai swarmv1alpha1.KaiInstance
+		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
+		Expect(controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)).To(BeTrue())
+	})
+
+	It("provisions all child resources with ownerRefs and tracks observedGeneration", func() {
+		r := newReconciler()
+		// First reconcile adds the finalizer and returns; second does the work.
+		for i := 0; i < 2; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+		}
+
+		var kai swarmv1alpha1.KaiInstance
+		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
+		slug := kai.Status.CustomerSlug
+		Expect(slug).NotTo(BeEmpty())
+		Expect(kai.Status.ObservedGeneration).To(Equal(kai.Generation))
+
+		// Each child must (a) exist and (b) carry an ownerRef pointing back to the KaiInstance.
+		// That ownerRef is what makes ownerReference cascade work, which is what TASK-003 hardens.
+		expectChild := func(obj client.Object, name string) {
+			GinkgoHelper()
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: kai.Namespace}, obj)).To(Succeed())
+			refs := obj.GetOwnerReferences()
+			Expect(refs).NotTo(BeEmpty(), "child %s should carry an ownerRef", name)
+			Expect(refs[0].Kind).To(Equal("KaiInstance"))
+			Expect(refs[0].UID).To(Equal(kai.UID))
+		}
+
+		child := childName(slug)
+		expectChild(&corev1.ConfigMap{}, child+"-identity")
+		expectChild(&corev1.PersistentVolumeClaim{}, child+"-state")
+		expectChild(&appsv1.Deployment{}, child)
+		expectChild(&corev1.Service{}, child)
+		expectChild(&networkingv1.NetworkPolicy{}, child+"-isolation")
+		expectChild(&networkingv1.Ingress{}, child+"-ws")
+		expectChild(&corev1.Secret{}, usersSecretName(slug))
+		expectChild(&corev1.Secret{}, chatBridgeSecretName(slug))
+	})
+
+	It("removes the finalizer on delete so the object can be garbage-collected", func() {
+		r := newReconciler()
+		// Reconcile until provisioned so the finalizer is in place.
+		for i := 0; i < 2; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		var kai swarmv1alpha1.KaiInstance
+		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, &kai)).To(Succeed())
+
+		// After Delete, DeletionTimestamp is set but the finalizer keeps the object alive.
+		// Reconcile drains it; the next Get should return NotFound.
+		reconcileUntilFinalized(r)
+		err := k8sClient.Get(ctx, typeNamespacedName, &kai)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "KaiInstance should be gone after finalizer drain")
+
+		// Idempotency: a reconcile against a missing object must not error.
+		_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+		Expect(err).NotTo(HaveOccurred())
 	})
 })

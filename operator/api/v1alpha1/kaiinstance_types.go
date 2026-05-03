@@ -103,8 +103,21 @@ const (
 	ConditionIngressReady         = "IngressReady"
 )
 
+// KaiInstanceFinalizer reserves a pre-delete hook on the KaiInstance object so
+// the operator gets a chance to run cleanup before garbage collection. Today
+// the cleanup is a no-op — child resources cascade via ownerReferences — but
+// the hook is in place for future SaaS pre-delete needs (GDPR DSAR snapshot,
+// billing-on-delete, audit log entry).
+const KaiInstanceFinalizer = "swarm.emai.io/finalizer"
+
 // KaiInstanceStatus defines the observed state of KaiInstance.
 type KaiInstanceStatus struct {
+	// observedGeneration reflects the metadata.generation that the operator last
+	// successfully reconciled. observedGeneration < generation means the operator
+	// has not yet processed the latest spec change.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// phase is the current lifecycle phase.
 	// +optional
 	Phase KaiInstancePhase `json:"phase,omitempty"`
