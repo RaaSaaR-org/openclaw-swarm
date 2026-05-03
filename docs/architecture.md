@@ -143,7 +143,6 @@ Deploy steps live in `kubernetes/cert-manager/README.md` (cert-manager + webhook
 
 ## Where to look next
 
-- **Marketing site** → `web/marketing/` (Astro 5, static output, dark-theme brand). Reads `agents/catalog/` at build time so the public app gallery matches the dashboard's chooser. Destined to move to `swarm-cloud/web/marketing/` when [[TASK-023]] splits the repos — see `web/marketing/README.md` for the move plan.
 - **Provisioning a tenant by hand** → `scripts/swarm-ctl.sh` (CLI) + `scripts/swarm-ctl.sh info <slug>` for the post-provision URL/token summary
 - **Health-checking the platform** → `scripts/health-check-k8s.sh` (walks every `KaiInstance`, reports OK / DEGRADED / SUSPENDED / PROVISIONING / FAILED / DOWN, JSON output for monitoring)
 - **Building locally** → `CONTRIBUTING.md`
