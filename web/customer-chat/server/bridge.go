@@ -118,12 +118,12 @@ const (
 	openClawVer = 3
 )
 
+// Minimal scopes needed for chat.send / chat.history / sessions.{list,create}.
+// Bigger scopes (operator.admin, operator.approvals) require an admin approver
+// to pair the device — and pre-paired customer agents only carry operator.pairing.
 var clientScopes = []string{
-	"operator.admin",
 	"operator.read",
 	"operator.write",
-	"operator.approvals",
-	"operator.pairing",
 }
 
 // dialUpstream opens the upstream WS, performs the connect handshake, ensures a session.
