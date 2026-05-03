@@ -27,7 +27,29 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	"github.com/emai-ai/swarm/pkg/quotas"
 )
+
+// isSaaSEnrolled reports whether the operator should apply the SaaS quota
+// envelope (pkg/quotas) to this KaiInstance. A workspace is enrolled iff:
+//
+//   - it has spec.tier set (the explicit "I'm a SaaS workspace" signal), AND
+//   - it is NOT managed: internal (PROP-003 coexistence rule — internal
+//     EmAI tenants are sized by hand and exempt from the SaaS envelope).
+//
+// Anything else — legacy tenants from before TASK-012/015 with no tier set,
+// or explicitly internal-managed tenants — keeps the original 1Gi/2Gi
+// defaults so swarm-emai/swarm-config workspaces don't get silently
+// throttled by a feature they never opted into.
+func isSaaSEnrolled(kai *swarmv1alpha1.KaiInstance) bool {
+	if kai == nil {
+		return false
+	}
+	if kai.Spec.Managed == "internal" {
+		return false
+	}
+	return kai.Spec.Tier != ""
+}
 
 const (
 	agentImage   = "ghcr.io/openclaw/openclaw:latest"
@@ -188,7 +210,14 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts dep
 		})
 	}
 
-	// Resource requirements
+	// Resource requirements. Two paths:
+	//   - SaaS-enrolled tenants (spec.tier set, not managed: internal):
+	//     pkg/quotas clamps spec.resources to the tier ceiling and supplies
+	//     tier-appropriate defaults for missing fields.
+	//   - Legacy tenants (no tier, or managed: internal): keep the original
+	//     1Gi/2Gi defaults so existing internal workspaces in
+	//     swarm-emai/swarm-config don't suddenly get throttled by the SaaS
+	//     quota envelope. Hand-sized via spec.resources as today.
 	resources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
@@ -201,6 +230,9 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts dep
 	}
 	if kai.Spec.Resources != nil {
 		resources = *kai.Spec.Resources
+	}
+	if isSaaSEnrolled(kai) {
+		resources = quotas.ClampResources(&resources, quotas.Tier(kai.Spec.Tier))
 	}
 
 	configMapName := name + "-identity"

@@ -372,7 +372,13 @@ func TestBuildDeploymentNoTelegram(t *testing.T) {
 }
 
 func TestBuildDeploymentCustomResources(t *testing.T) {
+	// Custom Spec.Resources are honored only when within the tier ceiling.
+	// Use the growth tier (2Gi memory limit) so the test's 1Gi limit passes
+	// through unchanged. Without a tier, the operator clamps to free
+	// (768Mi limit) — that's the right behavior, but it's covered by a
+	// dedicated clamping test below.
 	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.Tier = "growth"
 	kai.Spec.Resources = &corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
@@ -386,7 +392,49 @@ func TestBuildDeploymentCustomResources(t *testing.T) {
 
 	mem := deploy.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]
 	if mem.String() != "1Gi" {
-		t.Errorf("custom memory limit = %s, want 1Gi", mem.String())
+		t.Errorf("custom memory limit (within growth tier) = %s, want 1Gi", mem.String())
+	}
+}
+
+func TestBuildDeploymentClampsResourcesToTierCeiling(t *testing.T) {
+	t.Parallel()
+	// Free-tier instance asking for 4Gi should be clamped to free's 768Mi
+	// limit. Defense-in-depth — the eventual ValidatingAdmissionWebhook
+	// (TASK-015 Phase 2) catches this earlier, but the operator clamps too
+	// in case a tenant bypasses the webhook (e.g. cluster admin patches a CR
+	// with kubectl --validate=false).
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.Tier = "free"
+	kai.Spec.Resources = &corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("4Gi"),
+		},
+	}
+
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	mem := deploy.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]
+	if mem.String() != "768Mi" {
+		t.Errorf("free-tier memory limit = %s, want 768Mi (clamped from 4Gi)", mem.String())
+	}
+}
+
+func TestBuildDeploymentInternalManagedSkipsClamp(t *testing.T) {
+	t.Parallel()
+	// EmAI-internal tenants (managed:internal) are sized by hand by the
+	// platform team — the operator must NOT clamp them to a SaaS tier. This
+	// is the PROP-003 coexistence rule baked into the operator.
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.Managed = "internal"
+	kai.Spec.Resources = &corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("4Gi"),
+		},
+	}
+
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	mem := deploy.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]
+	if mem.String() != "4Gi" {
+		t.Errorf("internal-managed memory limit = %s, want 4Gi (no clamp)", mem.String())
 	}
 }
 
