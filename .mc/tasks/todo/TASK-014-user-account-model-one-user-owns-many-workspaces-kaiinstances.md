@@ -67,17 +67,21 @@ The current model is "1 customerSlug = 1 KaiInstance" — there is **no concept 
 - Email-verification gate: **block login until verified** (per PROP-001 default; enforcement happens at the call site in [[TASK-013]]).
 - Stripe customer ID column included on the User row from day one so [[TASK-016]] doesn't need a schema migration.
 
+**Phase 1 (operator CRD `spec.userRef` + `swarm.io/user-id` label) — done** on 2026-05-03 across three coordinating commits:
+- [[TASK-012]] Phase 2.A added `spec.userRef` to `KaiInstance` and made the operator render `swarm.io/user-id=<userRef>` on every child resource (Deployment, Service, ConfigMap, PVC, NetworkPolicy, Ingress) via `commonLabelsFor`.
+- [[TASK-013]] Phase 1.A made onboarding's verify endpoint stamp the same `swarm.io/user-id` label directly on the KaiInstance metadata when it creates the CR — so `kubectl get kaiinstance -l swarm.io/user-id=<uid>` lists the CRs themselves, not just child pods.
+- [[TASK-015]] Phase 1 exercises the contract via `countWorkspacesForUser` (label-selector List against the dynamic K8s client) and is covered by an end-to-end test that asserts the count drives the 402-on-cap response.
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (operator CRD `spec.userRef` + `swarm.io/user-id` label on child resources): bundled with [[TASK-012]] v1alpha2.
-- Phase 2 (customer-center / center swap from per-tenant Secret to Postgres lookup): blocked on Phase 1 (operator must label child resources before the dashboard can query by user-id) and on [[TASK-013]] (signup creates the User row in the first place).
-- Phase 3 ("your workspaces" view): blocked on Phase 1 + Phase 2.
+- Phase 2 (customer-center swap from per-tenant Secret to Postgres lookup): blocked on a real Postgres pool wiring + the dashboard rewrite. Today the dev path uses MemoryStore in onboarding only.
+- Phase 3 ("your workspaces" view in the dashboard): blocked on Phase 2.
 - Phase 4 (Postgres provisioning in production): lives in `swarm-cloud` overlay, not the public swarm repo. Hetzner managed Postgres or Neon — exact pick deferred to deploy time.
 
 ## Acceptance Criteria
 - [x] User entity exists in code with stable ID, email, created-at, tier, deleted-at — `pkg/users.User` + `pkg/userspg/schema.sql` (Phase 0, 2026-05-03)
-- [ ] `kubectl get kaiinstance -l swarm.io/user-id=<uid>` (or `swarm.emai.io/user-id` while pre-TASK-024) returns all of a user's workspaces (Phase 1, blocked on TASK-012)
+- [x] `kubectl get kaiinstance -l swarm.io/user-id=<uid>` (or `swarm.emai.io/user-id` while pre-TASK-024) returns all of a user's workspaces (Phase 1, 2026-05-03 — onboarding stamps the label on CR metadata at create time)
 - [ ] Customer-center "your workspaces" view shows the list (Phase 3)
-- [ ] Existing pre-SaaS customers continue to reconcile cleanly (Phase 1+ — `managed: internal` keeps `userRef` null)
+- [x] Existing pre-SaaS customers continue to reconcile cleanly (Phase 1+ — `managed: internal` keeps `userRef` null; verified by `TestBuildDeploymentInternalManagedSkipsClamp` and the `isSaaSEnrolled` predicate that exempts legacy tenants)
 
 ## Notes
 This is the foundational schema decision — get it wrong and TASK-016 (billing), TASK-021 (deletion), TASK-015 (quotas) all become messy. Bundle the User decision into the PROP-001 proposal that TASK-012 will spawn.
