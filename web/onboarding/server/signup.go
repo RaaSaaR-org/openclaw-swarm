@@ -17,6 +17,10 @@ import (
 	"sync"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"github.com/emai-ai/swarm/pkg/auth"
 	"github.com/emai-ai/swarm/pkg/email"
 	"github.com/emai-ai/swarm/pkg/users"
@@ -148,9 +152,15 @@ func (s *server) handleSignup(w http.ResponseWriter, r *http.Request) {
 
 // handleVerify is the GET /api/signup/verify?token=<...>&id=<userID> endpoint
 // the verification email links to. Validates the HMAC signature and exp,
-// flips email_verified_at on the User, and returns 200. KaiInstance
-// provisioning happens in a future phase (TASK-013 Phase 1) — today the
-// verified user record is the end of the flow.
+// flips email_verified_at on the User, then provisions the user's first
+// KaiInstance (TASK-013 Phase 1.A): tier=free, managed=saas,
+// userRef=<the user's ID>, appRef=defaultSignupApp. The slug is derived
+// from the User ID so it's globally unique by construction without any
+// user-facing input.
+//
+// Provisioning failures are surfaced as 502 (the user IS verified, but
+// their workspace didn't land — they'll need a retry path or admin
+// intervention; that retry path is a Phase 1.B follow-up).
 func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if !s.signup.Enabled {
 		writeErr(w, http.StatusNotFound, errors.New("signup disabled"))
@@ -166,8 +176,8 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid token: %w", err))
 		return
 	}
-	if err := s.users.MarkEmailVerified(r.Context(), id, time.Now()); err != nil {
-		// ErrNotFound → user deleted; any other error → 500.
+	u, err := s.users.GetByID(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, users.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, err)
 			return
@@ -175,7 +185,94 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "verified"})
+	if err := s.users.MarkEmailVerified(r.Context(), id, time.Now()); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Provision the workspace. Skip when the K8s client isn't wired (dev
+	// mode without kubeconfig) — the user is still marked verified and a
+	// retry path lands in Phase 1.B.
+	resp := map[string]string{"status": "verified"}
+	if s.dyn != nil {
+		slug := slugFromUserID(u.ID)
+		gatewayToken, err := generateToken()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, fmt.Errorf("token gen: %w", err))
+			return
+		}
+		obj := buildSaaSKaiInstance(s.namespace, slug, u, gatewayToken)
+		if _, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Create(r.Context(), obj, metav1.CreateOptions{}); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				// Verify clicked twice — fine, workspace already exists.
+				log.Printf("verify: workspace already exists for %s: %v", u.Email, err)
+				resp["workspace"] = slug
+				resp["status"] = "verified"
+				writeJSON(w, http.StatusOK, resp)
+				return
+			}
+			log.Printf("verify: provision failed for %s: %v", u.Email, err)
+			writeErr(w, http.StatusBadGateway, fmt.Errorf("verified but workspace provisioning failed: %w", err))
+			return
+		}
+		resp["workspace"] = slug
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// defaultSignupApp is the persona a brand-new SaaS workspace ships with
+// when the user didn't pick one at signup. Phase 1.B will let signup carry
+// an `app` field and store it on the User row.
+const defaultSignupApp = "personal-assistant"
+
+// slugFromUserID derives a DNS-safe slug from a User ID (`u_<26-char ULID>`).
+// Strips the `u_` prefix, lowercases, takes the first 12 chars of the ULID
+// body — globally unique per ULID's collision space, short enough to fit
+// comfortably in `kai-<slug>.<domain>` URLs.
+func slugFromUserID(userID string) string {
+	body := strings.TrimPrefix(userID, users.IDPrefix)
+	if len(body) > 12 {
+		body = body[:12]
+	}
+	return "u" + strings.ToLower(body)
+}
+
+// buildSaaSKaiInstance is the Unstructured KaiInstance written to the
+// cluster on verify. Spec fields populated per PROP-001 + TASK-012 Phase
+// 2.A: managed:saas + tier:free + userRef + appRef + the gateway-auth
+// shape every operator-managed instance carries.
+func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken string) *unstructured.Unstructured {
+	tier := string(u.Tier)
+	if tier == "" {
+		tier = string(users.TierFree)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "swarm.emai.io/v1alpha1",
+		"kind":       "KaiInstance",
+		"metadata": map[string]any{
+			"name":      "kai-" + slug,
+			"namespace": namespace,
+			"annotations": map[string]any{
+				"swarm.io/created-by": "onboarding-signup",
+			},
+		},
+		"spec": map[string]any{
+			// Legacy CRD field names — they keep their names until the
+			// v1alpha2 bump bundled with TASK-012 + TASK-024.
+			"customerName": u.Email,
+			"customerSlug": slug,
+			"projectName":  "Workspace",
+			// SaaS-direction fields from TASK-012 Phase 2.A.
+			"tier":     tier,
+			"userRef":  u.ID,
+			"managed":  "saas",
+			"appRef":   defaultSignupApp,
+			"gatewayAuth": map[string]any{
+				"mode":  "token",
+				"token": gatewayToken,
+			},
+		},
+	}}
 }
 
 // buildVerifyLink mints the URL the verification email links to. Format:

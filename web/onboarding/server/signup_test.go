@@ -9,6 +9,11 @@ import (
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
+
 	"github.com/emai-ai/swarm/pkg/email"
 	"github.com/emai-ai/swarm/pkg/users"
 )
@@ -27,8 +32,17 @@ func (c *captureSender) Send(_ context.Context, m email.Message) error {
 func newSignupServer(t *testing.T) (*server, *captureSender) {
 	t.Helper()
 	cap := &captureSender{}
+	// Fake dynamic client so provision-on-verify (TASK-013 Phase 1.A)
+	// has somewhere to land its KaiInstance. Empty list-kinds map for
+	// kaiInstanceGVR so List ops don't 404 in unrelated codepaths.
+	scheme := runtime.NewScheme()
+	listKinds := map[schema.GroupVersionResource]string{
+		kaiInstanceGVR: "KaiInstanceList",
+	}
+	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds)
 	s := &server{
 		namespace: "emai-swarm",
+		dyn:       dyn,
 		users:     users.NewMemoryStore(),
 		email:     cap,
 		signup: signupConfig{
@@ -184,6 +198,106 @@ func TestHandleVerifyHappyPath(t *testing.T) {
 	u, _ := s.users.GetByID(context.Background(), id)
 	if u.EmailVerifiedAt == nil {
 		t.Error("user must be marked verified after clicking the link")
+	}
+}
+
+func TestHandleVerifyProvisionsKaiInstance(t *testing.T) {
+	t.Parallel()
+	s, cap := newSignupServer(t)
+	// Sign up + verify.
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse"}`))
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id := parsed.Query().Get("id")
+	tok := parsed.Query().Get("token")
+
+	rr = httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil)
+	s.handleVerify(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("verify: expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	// A KaiInstance should now exist with the right SaaS Spec fields.
+	wantSlug := slugFromUserID(id)
+	got, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Get(context.Background(), "kai-"+wantSlug, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("KaiInstance kai-%s should be created on verify: %v", wantSlug, err)
+	}
+	spec, _ := got.Object["spec"].(map[string]any)
+	if spec["userRef"] != id {
+		t.Errorf("spec.userRef = %v, want %s", spec["userRef"], id)
+	}
+	if spec["tier"] != "free" {
+		t.Errorf("spec.tier = %v, want free", spec["tier"])
+	}
+	if spec["managed"] != "saas" {
+		t.Errorf("spec.managed = %v, want saas", spec["managed"])
+	}
+	if spec["appRef"] != defaultSignupApp {
+		t.Errorf("spec.appRef = %v, want %s", spec["appRef"], defaultSignupApp)
+	}
+	if spec["customerSlug"] != wantSlug {
+		t.Errorf("spec.customerSlug = %v, want %s", spec["customerSlug"], wantSlug)
+	}
+}
+
+func TestHandleVerifyDoubleClickIsIdempotent(t *testing.T) {
+	t.Parallel()
+	s, cap := newSignupServer(t)
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse"}`))
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id, tok := parsed.Query().Get("id"), parsed.Query().Get("token")
+
+	// First verify creates the workspace.
+	rr = httptest.NewRecorder()
+	s.handleVerify(rr, httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first verify: expected 200, got %d", rr.Code)
+	}
+	// Second verify (user clicked link twice) must not error or duplicate.
+	rr = httptest.NewRecorder()
+	s.handleVerify(rr, httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second verify: expected 200 (idempotent), got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleVerifyWithoutDynClientStillVerifies(t *testing.T) {
+	t.Parallel()
+	// Dev mode: no kubeconfig → no dynamic client. Verify must still
+	// succeed (the user is marked verified) even if no workspace lands.
+	s, cap := newSignupServer(t)
+	s.dyn = nil
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse"}`))
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id, tok := parsed.Query().Get("id"), parsed.Query().Get("token")
+
+	rr = httptest.NewRecorder()
+	s.handleVerify(rr, httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("verify (no K8s): expected 200, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	u, _ := s.users.GetByID(context.Background(), id)
+	if u.EmailVerifiedAt == nil {
+		t.Error("user must be verified even when provisioning is skipped")
+	}
+}
+
+func TestSlugFromUserID(t *testing.T) {
+	t.Parallel()
+	got := slugFromUserID("u_01HX3ZQABCDEFGHJKMNPQRSTVWXY1Z")
+	want := "u01hx3zqabcde" // "u" prefix + first 12 chars of ULID body, lowercased
+	if got != want {
+		t.Errorf("slugFromUserID = %q, want %q", got, want)
+	}
+	if len(got) != 13 {
+		t.Errorf("slug length = %d, want 13", len(got))
 	}
 }
 

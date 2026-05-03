@@ -57,8 +57,10 @@ The vision is "anyone can visit a website and get their own private OpenClaw ass
 - Magic link vs password: **password v1** (we already have argon2id from pkg/auth; magic-link adds a second token-issuance flow).
 - Provision pod immediately on verification or lazily? **Phase 1 decides** — today the verified-user record is the end of the flow; provisioning lands in Phase 1 once TASK-018 Phase 1 (operator catalog renderer) makes the catalog persona available.
 
+**Phase 1.A (provision-on-verify) — done** on 2026-05-03. `handleVerify` now creates a `KaiInstance` after `MarkEmailVerified` succeeds. Spec carries the full SaaS-direction shape: `tier=free` (from User row), `userRef=<u.ID>`, `managed=saas`, `appRef=personal-assistant` (default until Phase 1.B lets signup carry an `app` field), gateway-auth token. Slug derived from User ID via `slugFromUserID()` so it's globally unique by construction (`u<12 lowercase hex chars from ULID body>`). Idempotent on double-click (409 → 200). Falls back to verification-only when no kubeconfig is present (dev mode). Three new tests cover the happy path, double-click idempotency, and the dev-mode fallback. Verified end-to-end against the live binary in dev mode — cluster-side write was deliberately avoided (would've needed user consent on the shared k3d cluster). Playwright snapshot of the SPA showed zero console errors.
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (provision KaiInstance on verify, with `spec.userRef`/`spec.appRef`/`managed:saas` populated): needs TASK-018 Phase 1 (operator catalog renderer) so the new instance gets a real persona, and benefits from TASK-014 Phase 4 (Postgres provisioning in swarm-cloud) so the User row survives restart.
+- Phase 1.B (signup carries `app` field, stored on User, used at verify): needs `App` field on `pkg/users.User` + schema migration. Small follow-up.
 - Phase 2 (real CAPTCHA — hCaptcha or Turnstile): site key + private key live in deployment overlay; the `captchaVerifier` interface is the seam.
 - Phase 3 (signup UI on the onboarding SPA): TypeScript + Vite — the existing admin-token form stays, signup gets its own route.
 - Phase 4 (Postgres swap of MemoryStore in production): blocked on TASK-014 Phase 4 (Postgres provisioning) and gives the User row durability.
