@@ -4,14 +4,17 @@ go 1.25.3
 
 require (
 	github.com/emai-ai/swarm/pkg/auth v0.0.0
+	github.com/emai-ai/swarm/pkg/authk8s v0.0.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
 )
 
-// pkg/auth is a sibling module in this repo; resolve via local replace so the
-// Docker build (with repo root as context) can find it without a published version.
+// pkg/auth + pkg/authk8s are sibling modules in this repo; resolve via local replace
+// so the Docker build (with repo root as context) can find them without a published version.
 replace github.com/emai-ai/swarm/pkg/auth => ../../../pkg/auth
+
+replace github.com/emai-ai/swarm/pkg/authk8s => ../../../pkg/authk8s
 
 require golang.org/x/crypto v0.50.0 // indirect
 

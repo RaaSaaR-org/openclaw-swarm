@@ -17,6 +17,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/emai-ai/swarm/pkg/auth"
+	"github.com/emai-ai/swarm/pkg/authk8s"
 )
 
 //go:embed all:web
@@ -31,6 +34,7 @@ type server struct {
 	demoMode     bool
 	devJWTSecret []byte // ephemeral random secret, only set when demoMode is true; never persisted
 	bridges      *bridgePool
+	revoker      auth.Revoker
 }
 
 func main() {
@@ -51,6 +55,7 @@ func main() {
 			log.Fatalf("KAI_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
 		}
 		s.devJWTSecret = secret
+		s.revoker = auth.NewMemoryRevoker()
 		log.Printf("============================================================")
 		log.Printf("KAI_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
 		log.Printf("Login accepts any user; JWT signed with random ephemeral secret.")
@@ -71,6 +76,10 @@ func main() {
 		} else {
 			s.core = core
 		}
+	}
+
+	if s.revoker == nil && s.core != nil {
+		s.revoker = &authk8s.SecretRevoker{Client: s.core, Namespace: namespace}
 	}
 
 	s.bridges = newBridgePool(s)

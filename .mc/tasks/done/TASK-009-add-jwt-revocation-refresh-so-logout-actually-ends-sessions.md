@@ -4,7 +4,7 @@ aliases:
 - TASK-009
 title: Add JWT revocation/refresh so logout actually ends sessions
 slug: add-jwt-revocation-refresh-so-logout-actually-ends-sessions
-status: backlog
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -19,6 +19,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Add JWT revocation/refresh so logout actually ends sessions
@@ -57,10 +59,10 @@ Current auth issues a 24h JWT in cookie `kai-session`. Logout deletes the cookie
 - RFC 7009 (Token revocation): https://datatracker.ietf.org/doc/html/rfc7009
 
 ## Acceptance Criteria
-- [ ] Logout invalidates the user's session within the chosen TTL window (and is documented as such)
-- [ ] Documented procedure for emergency "log out everyone for tenant X" within 5 minutes
-- [ ] Tests cover: revoked token rejected, refresh rotation, expired refresh
-- [ ] Approach written up in `docs/architecture.md` auth section
+- [x] Logout invalidates the user's session within the chosen TTL window (verified end-to-end on 2026-05-03 — login → auth-OK → logout → cookie-replay returns `authenticated:false`)
+- [x] Documented procedure for emergency "log out everyone for tenant X" within 5 minutes (`kubectl patch secret kai-<slug>-chat-bridge -p='{"data":{"jwt-secret":"<new-base64>"}}'` invalidates every outstanding token at the signature level — see docs/architecture.md auth section)
+- [x] Tests cover: revoked token rejected (pkg/auth + pkg/authk8s + customer-center end-to-end), expired-jti pruning, list bounded at MaxEntriesPerSlug, idempotent revoke. (Refresh rotation deferred — Option A was rejected in the Decided block; Option B does not use refresh tokens.)
+- [x] Approach written up in `docs/architecture.md` auth section
 
 ## Notes
 Coordinate with TASK-004 (shared auth module) — implement once in the shared module, both apps benefit.

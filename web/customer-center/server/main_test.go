@@ -55,7 +55,7 @@ func newFixture(t *testing.T, slug string, users []userRecord) *fixture {
 	core := corefake.NewSimpleClientset(chatBridge, usersSecret)
 
 	return &fixture{
-		server:     &server{dyn: dyn, core: core, namespace: ns},
+		server:     &server{dyn: dyn, core: core, namespace: ns, revoker: pkgauth.NewMemoryRevoker()},
 		jwtSecret:  jwtSecret,
 		clientCore: core,
 	}
@@ -193,6 +193,46 @@ func TestHandleLogout_ClearsCookie(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected an expiring session cookie on logout")
+	}
+}
+
+func TestHandleLogout_RevokesJtiSoStolenCookieIsRejected(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+
+	cookie, err := pkgauth.IssueSession("acme", "alice@acme.de", f.jwtSecret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sanity: cookie authenticates before logout.
+	authInfoReq := slugReq(http.MethodGet, "/api/center/acme/auth-info", "acme", "")
+	authInfoReq.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	f.server.handleAuthInfo(rr, authInfoReq)
+	var body map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body["authenticated"] != true {
+		t.Fatalf("pre-logout: expected authenticated, got %v", body)
+	}
+
+	// Logout (with the cookie attached so the server can read the jti).
+	logoutReq := slugReq(http.MethodPost, "/api/center/acme/logout", "acme", "")
+	logoutReq.AddCookie(cookie)
+	rr = httptest.NewRecorder()
+	f.server.handleLogout(rr, logoutReq)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("logout: expected 204, got %d", rr.Code)
+	}
+
+	// Replay the same cookie — server must now reject it as revoked.
+	rr = httptest.NewRecorder()
+	authInfoReq2 := slugReq(http.MethodGet, "/api/center/acme/auth-info", "acme", "")
+	authInfoReq2.AddCookie(cookie)
+	f.server.handleAuthInfo(rr, authInfoReq2)
+	body = nil
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if body["authenticated"] != false {
+		t.Fatalf("post-logout replay: expected authenticated=false, got %v", body)
 	}
 }
 

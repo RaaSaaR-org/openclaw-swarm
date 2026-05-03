@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -125,8 +126,40 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// Best-effort server-side revocation: parse the cookie's claims (without
+	// requiring a valid signature — the caller is leaving the session anyway),
+	// record the jti so concurrent reuse of a stolen cookie is shut down before
+	// natural expiry. Failures are logged but do not block the client logout.
+	if c, err := r.Cookie(auth.SessionCookieName); err == nil && c.Value != "" && s.revoker != nil {
+		if claims := unsafeParseClaims(c.Value); claims != nil && claims.Jti != "" {
+			exp := time.Unix(claims.Exp, 0)
+			if err := s.revoker.Revoke(r.Context(), claims.Slug, claims.Jti, exp); err != nil {
+				log.Printf("revoke jti=%s slug=%s: %v", claims.Jti, claims.Slug, err)
+			}
+		}
+	}
 	http.SetCookie(w, auth.MakeClearCookie())
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// unsafeParseClaims decodes a JWT payload without verifying the signature.
+// Only used at logout: the caller is throwing the session away, and we just
+// want the slug + jti to populate the revocation list. Never trust the result
+// for authorization.
+func unsafeParseClaims(token string) *auth.SessionClaims {
+	parts := strings.SplitN(token, ".", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil
+	}
+	var c auth.SessionClaims
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return nil
+	}
+	return &c
 }
 
 // handleAuthInfo reports auth state to the frontend. Always 200 — the body tells
@@ -194,7 +227,21 @@ func (s *server) authedClaims(r *http.Request, slug string) (*auth.SessionClaims
 	if err != nil {
 		return nil, false
 	}
-	return auth.Authenticate(c.Value, slug, secret, time.Now())
+	claims, ok := auth.Authenticate(c.Value, slug, secret, time.Now())
+	if !ok {
+		return nil, false
+	}
+	if s.revoker != nil {
+		revoked, err := s.revoker.IsRevoked(r.Context(), slug, claims.Jti)
+		if err != nil {
+			log.Printf("revocation check jti=%s slug=%s: %v", claims.Jti, slug, err)
+			return nil, false
+		}
+		if revoked {
+			return nil, false
+		}
+	}
+	return claims, true
 }
 
 func (s *server) resolveJWTSecret(ctx context.Context, slug string) ([]byte, error) {

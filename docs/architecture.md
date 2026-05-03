@@ -34,6 +34,7 @@ The single biggest "why is this confusing" answer: there are **two separate auth
 
 - The operator generates the per-tenant JWT secret on first reconcile and stores it in `kai-<slug>-chat-bridge` (along with the chat bridge's Ed25519 device keypair). It is **not rotated** automatically; rotation today means deleting the Secret and bouncing the chat-bridge connections.
 - The bootstrap-admin flow lives in customer-center: when `kai-<slug>-users` is empty, the first POST to `/api/center/<slug>/login` is treated as initial setup — the submitter's email + password becomes the admin record. After that, normal login + Team-page-driven user CRUD.
+- Logout is **server-side enforced**: every JWT carries a per-issue `jti` (16 hex chars). The logout handler records the `jti` in `kai-<slug>-chat-bridge.revoked-jtis` (JSON array, capped at 1000 entries, expired entries pruned on read). On the next request, `auth.Authenticate` succeeds but the server checks the `jti` against the revocation list and rejects revoked tokens. Implementation lives in `pkg/authk8s` (the K8s-Secret-backed `Revoker`) so `pkg/auth` stays dep-light. Emergency "log out everyone for tenant X" remains a one-line Secret patch that bumps `jwt-secret`, invalidating every outstanding token at the signature level.
 
 ---
 
