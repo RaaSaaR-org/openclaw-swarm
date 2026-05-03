@@ -210,6 +210,11 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							// Probes are generous because the OpenClaw 2026.4.x prep
+							// pipeline (model-resolution + auth + core-plugin-tools)
+							// can block the Node event loop for 15-30s on slower CPUs
+							// (Hetzner ARM CAX21), causing healthz to time out even
+							// when the gateway is technically ready.
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -217,10 +222,10 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 										Port: intstr.FromInt(gatewayPort),
 									},
 								},
-								InitialDelaySeconds: 60,
-								PeriodSeconds:       30,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
+								InitialDelaySeconds: 120,
+								PeriodSeconds:       60,
+								TimeoutSeconds:      30,
+								FailureThreshold:    5,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -229,9 +234,9 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string) *appsv1.
 										Port: intstr.FromInt(gatewayPort),
 									},
 								},
-								InitialDelaySeconds: 30,
-								PeriodSeconds:       10,
-								TimeoutSeconds:      5,
+								InitialDelaySeconds: 60,
+								PeriodSeconds:       30,
+								TimeoutSeconds:      30,
 								FailureThreshold:    5,
 							},
 							VolumeMounts: []corev1.VolumeMount{
