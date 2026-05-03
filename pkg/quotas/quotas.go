@@ -37,6 +37,12 @@ const (
 // Memory and CPU are in Kubernetes resource units (Mi, m); we keep them as
 // strings here so the operator can hand them straight to
 // `resource.MustParse` without import dependencies bleeding into pkg/quotas.
+//
+// DefaultModel is the OpenRouter model slug the operator uses when the
+// KaiInstance has spec.tier set but spec.model empty. Free defaults to a
+// free OpenRouter model so the platform isn't on the hook for token costs;
+// paid tiers default to a Haiku/Flash-class paid model. Empty means "no
+// opinion" — the operator falls back to its own legacy default.
 type Limits struct {
 	MaxInstancesPerUser int           // hard cap on KaiInstances per User; 0 = unbounded
 	MemoryRequest       string        // e.g. "384Mi"; clamped down if spec exceeds
@@ -47,6 +53,7 @@ type Limits struct {
 	DailyMessages       int           // soft cap on user-sent chat messages per UTC day; 0 = unbounded
 	MaxTelegramBots     int           // 0 = unbounded; free tier = 0 (disable Telegram entirely)
 	IdleSuspendAfter    time.Duration // suspend instance after this much inactivity; 0 = never
+	DefaultModel        string        // OpenRouter slug; empty = operator falls back to its legacy default
 }
 
 // defaults map the public-repo tier shapes. PROP-002 + TASK-015 numbers:
@@ -70,6 +77,9 @@ var defaults = map[Tier]Limits{
 		DailyMessages:       100,
 		MaxTelegramBots:     0,
 		IdleSuspendAfter:    14 * 24 * time.Hour,
+		// Free OpenRouter model — zero token cost to the platform. Quality is
+		// "good enough to evaluate Kai"; users wanting better answers upgrade.
+		DefaultModel: "openrouter/stepfun/step-3.5-flash:free",
 	},
 	TierStarter: {
 		MaxInstancesPerUser: 3,
@@ -81,6 +91,10 @@ var defaults = map[Tier]Limits{
 		DailyMessages:       0,
 		MaxTelegramBots:     1,
 		IdleSuspendAfter:    0,
+		// Haiku 4.5: cheap, fast, good for chat-heavy day-to-day usage. The
+		// 500k-tokens/day cap costs ~€2-3/day at retail pricing — fits the
+		// €10/mo tier with margin.
+		DefaultModel: "openrouter/anthropic/claude-haiku-4-5",
 	},
 	TierGrowth: {
 		MaxInstancesPerUser: 10,
@@ -92,11 +106,13 @@ var defaults = map[Tier]Limits{
 		DailyMessages:       0,
 		MaxTelegramBots:     5,
 		IdleSuspendAfter:    0,
+		DefaultModel:        "openrouter/anthropic/claude-haiku-4-5",
 	},
 	TierEnterprise: {
 		// Enterprise is "we'll size it for you" — every numerical field is 0
-		// (unbounded). The deployment overlay's ConfigMap is the actual
-		// source of enterprise limits per tenant.
+		// (unbounded), and DefaultModel stays empty so the operator falls back
+		// to its own legacy default. The deployment overlay's ConfigMap is
+		// the actual source of enterprise limits per tenant.
 	},
 }
 

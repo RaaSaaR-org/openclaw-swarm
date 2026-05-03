@@ -418,6 +418,69 @@ func TestBuildDeploymentClampsResourcesToTierCeiling(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentDefaultModelByTier(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		tier       string
+		wantPrefix string
+	}{
+		{"free", "openrouter/stepfun"},                   // free OpenRouter model
+		{"starter", "openrouter/anthropic/claude-haiku"}, // paid Haiku class
+		{"growth", "openrouter/anthropic/claude-haiku"},  // paid Haiku class
+	}
+	for _, c := range cases {
+		t.Run(c.tier, func(t *testing.T) {
+			kai := newTestKaiInstance("kai-test", "emai-swarm")
+			kai.Spec.Tier = c.tier
+			deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+			for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+				if env.Name == "OPENCLAW_MODEL" {
+					if !strings.HasPrefix(env.Value, c.wantPrefix) {
+						t.Errorf("tier=%s: model = %q, want prefix %q", c.tier, env.Value, c.wantPrefix)
+					}
+					return
+				}
+			}
+			t.Errorf("OPENCLAW_MODEL env not set")
+		})
+	}
+}
+
+func TestBuildDeploymentSpecModelOverridesTierDefault(t *testing.T) {
+	t.Parallel()
+	// Explicit spec.Model always wins over the tier default — operators
+	// running custom models for specific tenants must not be silently
+	// overridden by the tier picker.
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai.Spec.Tier = "free"
+	kai.Spec.Model = "openrouter/anthropic/claude-sonnet"
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "OPENCLAW_MODEL" {
+			if env.Value != "openrouter/anthropic/claude-sonnet" {
+				t.Errorf("explicit spec.Model = %q, want openrouter/anthropic/claude-sonnet (tier default must not override)", env.Value)
+			}
+			return
+		}
+	}
+}
+
+func TestBuildDeploymentLegacyTenantKeepsLegacyModel(t *testing.T) {
+	t.Parallel()
+	// No tier, no managed → legacy tenant. Must get the operator's hard-coded
+	// defaultModel so existing internal workspaces don't suddenly switch.
+	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "OPENCLAW_MODEL" {
+			if env.Value != defaultModel {
+				t.Errorf("legacy tenant model = %q, want defaultModel %q", env.Value, defaultModel)
+			}
+			return
+		}
+	}
+}
+
 func TestBuildDeploymentInternalManagedSkipsClamp(t *testing.T) {
 	t.Parallel()
 	// EmAI-internal tenants (managed:internal) are sized by hand by the

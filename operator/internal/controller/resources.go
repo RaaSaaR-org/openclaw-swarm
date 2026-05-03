@@ -169,7 +169,20 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts dep
 		replicas = 0
 	}
 
+	// Model resolution (TASK-019 Phase 1):
+	//   1. spec.Model (explicit override) wins.
+	//   2. SaaS-enrolled tenants (spec.tier set, not managed:internal) fall
+	//      back to the tier's DefaultModel from pkg/quotas — free → free
+	//      OpenRouter model, paid → Haiku.
+	//   3. Legacy tenants (no tier set or managed:internal) fall back to
+	//      the operator's hard-coded `defaultModel`, preserving current
+	//      behavior for existing internal workspaces in swarm-emai.
 	model := defaultModel
+	if isSaaSEnrolled(kai) {
+		if tierDefault := quotas.For(quotas.Tier(kai.Spec.Tier)).DefaultModel; tierDefault != "" {
+			model = tierDefault
+		}
+	}
 	if kai.Spec.Model != "" {
 		model = kai.Spec.Model
 	}

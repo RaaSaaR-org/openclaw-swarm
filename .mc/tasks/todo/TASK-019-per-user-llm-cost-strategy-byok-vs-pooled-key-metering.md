@@ -57,8 +57,9 @@ The single largest variable cost in this SaaS is the LLM inference bill. Recent 
 
 **Phase 0 (operator pooled-key support) — done** on 2026-05-03. Operator now reads `SWARM_POOLED_OPENROUTER_SECRET` env var; when set, every reconciled KaiInstance points its `OPENROUTER_API_KEY` env var at that one Secret instead of `kai-<slug>-openrouter`. When unset, the legacy per-tenant fallback preserves backwards compatibility for existing deploys. The pooled Secret itself is provisioned by the deployment overlay (`swarm-cloud` / `swarm-emai`), not the public swarm repo. Documented in `operator/config/manager/manager.yaml` (commented opt-in block) and `docs/architecture.md`.
 
+**Phase 1 (per-tier default model) — done** on 2026-05-03. `pkg/quotas.Limits` grew a `DefaultModel` field; per-tier numbers: free → `openrouter/stepfun/step-3.5-flash:free` (free OpenRouter model so the platform isn't on the hook for token costs), starter/growth → `openrouter/anthropic/claude-haiku-4-5` (cheap Haiku class; ~€2-3/day at 500k tokens, fits the €10/mo starter tier with margin), enterprise → empty (operator falls back to its legacy default). Operator's `buildDeployment` now resolves `OPENCLAW_MODEL` in three steps: (1) explicit `spec.Model` always wins, (2) SaaS-enrolled tenants fall back to `quotas.For(tier).DefaultModel`, (3) legacy tenants keep the operator's hard-coded default. Three new tests cover all three branches.
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (per-tier model selection): blocked on [[TASK-012]] adding `spec.tier` to the KaiInstance CRD.
 - Phase 2 (usage tracker cron — polls OpenRouter activity API per workspace, writes to a per-slug ConfigMap): can ship without TASK-014 if usage stays workspace-scoped, but the meaningful per-user view needs the User entity.
 - Phase 3 (auto-suspend at cap — cron patches `spec.suspended=true` when the workspace exceeds its daily cap): requires Phase 2.
 - Phase 4 (Prometheus per-user token-usage metric + Grafana dashboard): blocked on [[TASK-014]] for the user-id label.
@@ -67,6 +68,7 @@ The single largest variable cost in this SaaS is the LLM inference bill. Recent 
 ## Acceptance Criteria
 - [x] Strategy decision documented (see [[PROP-002]] — pooled-only locked 2026-05-03)
 - [x] Operator wiring supports pooled Secret (Phase 0, 2026-05-03)
+- [x] Per-tier default model resolved at reconcile time (Phase 1, 2026-05-03 — free → free OpenRouter model, paid → Haiku)
 - [ ] If pooled: per-user daily token budget enforced; instance auto-suspends at cap; user gets email at 80% (depends TASK-020)
 - [ ] If BYOK: encrypted key storage + customer-center UI to add/rotate keys (deferred per [[PROP-002]] — BYOK rejected for v1)
 - [ ] Per-user token usage metric exposed to Prometheus
