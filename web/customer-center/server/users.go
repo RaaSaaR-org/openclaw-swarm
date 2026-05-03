@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/argon2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/emai-ai/swarm/pkg/auth"
 )
 
 // usersSecretKey is the key inside kai-<slug>-users where the JSON list lives.
@@ -107,7 +106,7 @@ func (s *server) addUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, userPublic{Email: email, CreatedAt: time.Now().UTC().Format(time.RFC3339), PasswordUpdatedAt: time.Now().UTC().Format(time.RFC3339)})
 		return
 	}
-	hash, err := hashPassword(body.Password)
+	hash, err := auth.HashPassword(body.Password)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash failed"})
 		return
@@ -201,7 +200,7 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	hash, err := hashPassword(body.Password)
+	hash, err := auth.HashPassword(body.Password)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash failed"})
 		return
@@ -289,29 +288,6 @@ func (s *server) updateUsersSecret(ctx context.Context, slug string, fn func([]u
 	sec.Data[usersSecretKey] = encoded
 	_, err = s.core.CoreV1().Secrets(s.namespace).Update(ctx, sec, metav1.UpdateOptions{})
 	return err
-}
-
-// hashPassword runs argon2id with conservative parameters (~64 MiB, 3 iterations, 4 lanes).
-// Output is the standard PHC string $argon2id$v=19$m=...$<salt>$<hash>.
-func hashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	const (
-		memory  uint32 = 64 * 1024
-		time_   uint32 = 3
-		threads uint8  = 4
-		keyLen  uint32 = 32
-	)
-	hash := argon2.IDKey([]byte(password), salt, time_, memory, threads, keyLen)
-	encoded := fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version,
-		memory, time_, threads,
-		base64.RawStdEncoding.EncodeToString(salt),
-		base64.RawStdEncoding.EncodeToString(hash),
-	)
-	return encoded, nil
 }
 
 func validEmail(s string) bool {

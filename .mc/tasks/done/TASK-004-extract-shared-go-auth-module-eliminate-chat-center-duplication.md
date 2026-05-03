@@ -4,7 +4,7 @@ aliases:
 - TASK-004
 title: Extract shared Go auth module (eliminate chat/center duplication)
 slug: extract-shared-go-auth-module-eliminate-chat-center-duplication
-status: backlog
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,8 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
+
 
 
 # Extract shared Go auth module (eliminate chat/center duplication)

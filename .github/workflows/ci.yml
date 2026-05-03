@@ -137,18 +137,26 @@ jobs:
         include:
           - app: operator
             context: operator
+            dockerfile: operator/Dockerfile
+          # customer-chat and customer-center build from the repo root because
+          # their Dockerfiles COPY the shared pkg/ module (TASK-004).
           - app: customer-chat
-            context: web/customer-chat
+            context: .
+            dockerfile: web/customer-chat/Dockerfile
           - app: customer-center
-            context: web/customer-center
+            context: .
+            dockerfile: web/customer-center/Dockerfile
           - app: admin-console
             context: web/admin-console
+            dockerfile: web/admin-console/Dockerfile
           - app: onboarding
             context: web/onboarding
+            dockerfile: web/onboarding/Dockerfile
           - app: status-page
             context: web/status-page
+            dockerfile: web/status-page/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t ${{ matrix.app }}:ci ${{ matrix.context }}
+        run: docker build -t ${{ matrix.app }}:ci -f ${{ matrix.dockerfile }} ${{ matrix.context }}

@@ -57,7 +57,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [customer-chat, customer-center, admin-console, onboarding, status-page]
+        include:
+          # customer-chat and customer-center build from the repo root because
+          # their Dockerfiles COPY the shared pkg/ module (TASK-004).
+          - app: customer-chat
+            context: .
+            dockerfile: web/customer-chat/Dockerfile
+          - app: customer-center
+            context: .
+            dockerfile: web/customer-center/Dockerfile
+          - app: admin-console
+            context: web/admin-console
+            dockerfile: web/admin-console/Dockerfile
+          - app: onboarding
+            context: web/onboarding
+            dockerfile: web/onboarding/Dockerfile
+          - app: status-page
+            context: web/status-page
+            dockerfile: web/status-page/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -85,7 +102,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: web/${{ matrix.app }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

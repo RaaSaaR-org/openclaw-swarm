@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,25 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/argon2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/emai-ai/swarm/pkg/auth"
 )
-
-// Cookie name shared across customer-chat and customer-center (same JWT secret +
-// claim shape) so a login on one is honored by the other when they share an origin.
-// Slug is stored in the JWT claim and validated per-request.
-const sessionCookieName = "kai-session"
-
-// JWT TTL — 24h, no revocation list in v1.
-const sessionTTL = 24 * time.Hour
-
-type sessionClaims struct {
-	Sub  string `json:"sub"`  // email
-	Slug string `json:"slug"` // customer slug
-	Exp  int64  `json:"exp"`  // unix seconds
-	Iat  int64  `json:"iat"`  // unix seconds
-}
 
 // handleLogin verifies email+password, issues a session cookie.
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +39,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if s.demoMode {
 		log.Printf("WARN [insecure-dev-auth] login bypass slug=%s email=%s remote=%s", slug, email, r.RemoteAddr)
-		if err := s.issueSession(w, slug, email, s.devJWTSecret); err != nil {
+		if err := s.issueAndSetSession(w, slug, email, s.devJWTSecret); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "session"})
 			return
 		}
@@ -85,16 +67,16 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if match == nil {
 		// Constant-time-ish: still hash a dummy password to mask timing differences.
-		_ = verifyArgon2id(body.Password, "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+		_ = auth.VerifyArgon2id(body.Password, "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid login"})
 		return
 	}
-	if !verifyArgon2id(body.Password, match.PasswordHash) {
+	if !auth.VerifyArgon2id(body.Password, match.PasswordHash) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid login"})
 		return
 	}
 
-	if err := s.issueSession(w, slug, email, jwtSecret); err != nil {
+	if err := s.issueAndSetSession(w, slug, email, jwtSecret); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "session"})
 		return
 	}
@@ -102,15 +84,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, auth.MakeClearCookie())
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -124,59 +98,36 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"email": claims.Sub, "slug": claims.Slug})
 }
 
-func (s *server) issueSession(w http.ResponseWriter, slug, email string, secret []byte) error {
-	now := time.Now().UTC()
-	claims := sessionClaims{
-		Sub:  email,
-		Slug: slug,
-		Iat:  now.Unix(),
-		Exp:  now.Add(sessionTTL).Unix(),
-	}
-	tok, err := signJWT(claims, secret)
+// issueAndSetSession is a thin wrapper that signs a JWT cookie via pkg/auth and writes it.
+func (s *server) issueAndSetSession(w http.ResponseWriter, slug, email string, secret []byte) error {
+	cookie, err := auth.IssueSession(slug, email, secret, time.Now())
 	if err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    tok,
-		Path:     "/",
-		MaxAge:   int(sessionTTL.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, cookie)
 	return nil
 }
 
-// authedClaims validates the cookie and returns claims if it matches the slug.
-func (s *server) authedClaims(r *http.Request, slug string) (*sessionClaims, bool) {
-	c, err := r.Cookie(sessionCookieName)
+// authedClaims validates the session cookie and returns claims if it matches the slug.
+// In dev-auth mode the per-startup ephemeral secret is used; otherwise the per-customer
+// chat-bridge JWT secret is read from K8s.
+func (s *server) authedClaims(r *http.Request, slug string) (*auth.SessionClaims, bool) {
+	c, err := r.Cookie(auth.SessionCookieName)
 	if err != nil || c.Value == "" {
 		return nil, false
 	}
-
-	var secret []byte
-	if s.demoMode {
-		secret = s.devJWTSecret
-	} else {
-		var err error
-		secret, err = s.readJWTSecret(r.Context(), slug)
-		if err != nil {
-			return nil, false
-		}
-	}
-
-	claims, err := parseJWT(c.Value, secret)
+	secret, err := s.resolveJWTSecret(r.Context(), slug)
 	if err != nil {
 		return nil, false
 	}
-	if claims.Slug != slug {
-		return nil, false
+	return auth.Authenticate(c.Value, slug, secret, time.Now())
+}
+
+func (s *server) resolveJWTSecret(ctx context.Context, slug string) ([]byte, error) {
+	if s.demoMode {
+		return s.devJWTSecret, nil
 	}
-	if time.Now().Unix() >= claims.Exp {
-		return nil, false
-	}
-	return claims, true
+	return s.readJWTSecret(ctx, slug)
 }
 
 func (s *server) readJWTSecret(ctx context.Context, slug string) ([]byte, error) {
@@ -197,81 +148,8 @@ func (s *server) readJWTSecret(ctx context.Context, slug string) ([]byte, error)
 	return jwt, nil
 }
 
-// ---------- argon2id verify ----------
-
-// verifyArgon2id parses a $argon2id$... PHC string and verifies the candidate password.
-func verifyArgon2id(password, encoded string) bool {
-	parts := strings.Split(encoded, "$")
-	// Expected: ["", "argon2id", "v=19", "m=65536,t=3,p=4", "<salt-b64>", "<hash-b64>"]
-	if len(parts) != 6 || parts[1] != "argon2id" {
-		return false
-	}
-	var version int
-	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil || version != argon2.Version {
-		return false
-	}
-	var memory uint32
-	var time_ uint32
-	var threads uint8
-	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time_, &threads); err != nil {
-		return false
-	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
-	if err != nil {
-		return false
-	}
-	want, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil {
-		return false
-	}
-	got := argon2.IDKey([]byte(password), salt, time_, memory, threads, uint32(len(want)))
-	return subtle.ConstantTimeCompare(got, want) == 1
-}
-
-// ---------- minimal HS256 JWT (no external dep) ----------
-
-func signJWT(c sessionClaims, secret []byte) (string, error) {
-	header := `{"alg":"HS256","typ":"JWT"}`
-	payload, err := json.Marshal(c)
-	if err != nil {
-		return "", err
-	}
-	h := base64.RawURLEncoding.EncodeToString([]byte(header))
-	p := base64.RawURLEncoding.EncodeToString(payload)
-	signing := h + "." + p
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(signing))
-	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	return signing + "." + sig, nil
-}
-
-func parseJWT(tok string, secret []byte) (*sessionClaims, error) {
-	parts := strings.Split(tok, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("bad jwt")
-	}
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(parts[0] + "." + parts[1]))
-	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	if subtle.ConstantTimeCompare([]byte(expected), []byte(parts[2])) != 1 {
-		return nil, errors.New("bad signature")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-	var c sessionClaims
-	if err := json.Unmarshal(payload, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-// ---------- shared helpers ----------
-
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
-
