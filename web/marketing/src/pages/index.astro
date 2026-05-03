@@ -1,0 +1,40 @@
+---
+import Base from '~/layouts/Base.astro';
+import { loadCatalog } from '~/data/catalog';
+
+// Featured: first three from the catalog. Order is alphabetical (loadCatalog
+// sorts directories) so it stays deterministic across builds.
+const apps = loadCatalog().slice(0, 3);
+---
+<Base title="Your private AI assistant" description="Kai is a private AI assistant that lives on your own workspace — chat, notes, code, learning. Pick an app, get to work.">
+  <h1>A private AI assistant — your workspace, your data.</h1>
+  <p>
+    Kai gives you a chat-based AI assistant in your own isolated workspace. No
+    shared chat history, no shared training data, no surprise pricing. Pick a
+    persona — personal assistant, coding helper, writing coach — and get
+    started in two minutes.
+  </p>
+  <p>
+    <a class="btn" href="/signup">Sign up — free tier</a>
+  </p>
+
+  <h2>Apps</h2>
+  <p>Curated personas you can pick at signup. <a href="/apps">See all →</a></p>
+  <div class="card-grid">
+    {apps.map((app) => (
+      <article class="card">
+        <div class="icon" set:html={app.iconSvg}></div>
+        <h3>{app.name}</h3>
+        <div class="meta">{app.category} · {app.tier}</div>
+        <p>{app.shortDescription}</p>
+      </article>
+    ))}
+  </div>
+
+  <h2>How it works</h2>
+  <ol>
+    <li>Sign up with email + password — verify the link, you're in.</li>
+    <li>Pick an app — that's the persona Kai uses to start.</li>
+    <li>Chat. Kai takes notes, remembers context, runs little tasks for you.</li>
+  </ol>
+</Base>

@@ -1,0 +1,23 @@
+---
+import Base from '~/layouts/Base.astro';
+
+// Phase 0: this page just points at the onboarding service. The signup form
+// itself lives there (TASK-013) — once TASK-013 Phase 3 ships a SPA-side
+// form, this page can either redirect or embed it via an iframe / fetch.
+// The deployment overlay overrides ONBOARDING_URL at build time.
+const onboardingUrl = import.meta.env.ONBOARDING_URL ?? 'https://onboarding.kai.example.org/';
+---
+<Base title="Sign up" description="Create your Kai account in two minutes — email + password, verify the link, you're in.">
+  <h1>Sign up</h1>
+  <p>
+    Signup runs on a separate service so the form has its own rate-limiting
+    and abuse defenses. Click below to create your account.
+  </p>
+  <p>
+    <a class="btn" href={onboardingUrl}>Continue to signup →</a>
+  </p>
+  <p style="color:var(--fg-muted);font-size:14px;">
+    By signing up you agree to the <a href="/terms">terms of service</a> and
+    the <a href="/privacy">privacy policy</a>.
+  </p>
+</Base>

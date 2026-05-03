@@ -1,0 +1,89 @@
+---
+import Base from '~/layouts/Base.astro';
+
+// Tiers + prices match PROP-002 / pkg/quotas. Real Stripe checkout buttons
+// land in TASK-016 Phase 1; for Phase 0 each CTA points at signup with the
+// chosen tier as a query param so the onboarding flow can pre-select it
+// later.
+const tiers = [
+  {
+    name: 'Free',
+    price: '€0',
+    cadence: 'forever',
+    cta: 'Sign up',
+    href: '/signup?tier=free',
+    features: [
+      '1 workspace',
+      'Free OpenRouter models only',
+      '~100 messages per day',
+      'Idle suspend after 14 days',
+    ],
+  },
+  {
+    name: 'Starter',
+    price: '€10',
+    cadence: 'per month',
+    cta: 'Start trial',
+    href: '/signup?tier=starter',
+    popular: true,
+    features: [
+      '3 workspaces',
+      'Haiku 4.5 / Gemini Flash class',
+      '500k tokens / day',
+      'Telegram bot',
+      'No idle suspend',
+    ],
+  },
+  {
+    name: 'Growth',
+    price: '€30',
+    cadence: 'per month',
+    cta: 'Start trial',
+    href: '/signup?tier=growth',
+    features: [
+      '10 workspaces',
+      '2M tokens / day',
+      '5 Telegram bots',
+      'Priority support',
+    ],
+  },
+  {
+    name: 'Enterprise',
+    price: 'Talk to us',
+    cadence: '',
+    cta: 'Contact sales',
+    href: 'mailto:hello@kai.example.org',
+    features: [
+      'Unlimited workspaces',
+      'Custom models',
+      'SSO + custom domain',
+      'SLA',
+    ],
+  },
+];
+---
+<Base title="Pricing" description="Simple pricing for a private AI assistant. Start free; upgrade when you want more workspaces, faster models, or higher limits.">
+  <h1>Pricing</h1>
+  <p>One price, no surprise overage. Start free; upgrade when you need more.</p>
+  <div class="pricing-grid">
+    {tiers.map((tier) => (
+      <article class={tier.popular ? 'tier-card popular' : 'tier-card'}>
+        <h3 style="margin-top:0;">{tier.name}</h3>
+        <div class="price">{tier.price}</div>
+        <div class="meta" style="font-size:13px;color:var(--fg-muted);">{tier.cadence}</div>
+        <ul>
+          {tier.features.map((f) => <li>{f}</li>)}
+        </ul>
+        <a class="btn" href={tier.href}>{tier.cta}</a>
+      </article>
+    ))}
+  </div>
+
+  <h2>Why pooled-only?</h2>
+  <p>
+    All tiers run on the same OpenRouter pool — we manage the keys and
+    enforce a per-workspace token budget. You don't need to bring your own
+    API key. (Bring-your-own-key may arrive later as a paid-tier opt-in if
+    real demand shows up.)
+  </p>
+</Base>

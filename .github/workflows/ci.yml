@@ -78,6 +78,40 @@ jobs:
         working-directory: web/${{ matrix.app }}/server
         run: go build -o /dev/null .
 
+  marketing:
+    name: Marketing site (Astro)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/marketing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/marketing/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke check — output exists
+        run: |
+          test -f dist/index.html
+          test -f dist/apps/index.html
+          test -f dist/pricing/index.html
+          test -f dist/privacy/index.html
+          test -f dist/terms/index.html
+          test -f dist/imprint/index.html
+          test -f dist/signup/index.html
+          # Catalog must render — fail if no app card landed.
+          grep -q "Personal Assistant" dist/apps/index.html
+          grep -q "Coding Helper" dist/apps/index.html
+
   api-specs:
     name: OpenAPI Lint
     runs-on: ubuntu-latest

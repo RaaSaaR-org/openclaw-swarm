@@ -1,0 +1,39 @@
+---
+import Base from '~/layouts/Base.astro';
+---
+<Base title="Privacy" description="How Kai handles your data.">
+  <article class="legal">
+    <h1>Privacy policy</h1>
+    <p><strong>Phase 0 placeholder.</strong> This page is a skeleton — the
+    real privacy policy lives in the deployment overlay
+    (<code>swarm-cloud</code>) once a deployment-specific data-handling
+    posture, retention windows, and DPA partner list are signed off.</p>
+
+    <h2>What Kai stores about you</h2>
+    <ul>
+      <li>Account: your email, password hash, language preference, billing tier.</li>
+      <li>Workspace: chat history, notes, files you upload, agent memory.</li>
+      <li>Usage: per-workspace token counts (for tier-budget enforcement).</li>
+      <li>Operational: server logs (request paths, timestamps, error traces).</li>
+    </ul>
+
+    <h2>What we don't do</h2>
+    <ul>
+      <li>We don't train models on your chat history.</li>
+      <li>We don't share your workspace contents with other users or third parties beyond the LLM provider needed to answer a request.</li>
+      <li>We don't sell ads or share data with advertisers.</li>
+    </ul>
+
+    <h2>Sub-processors</h2>
+    <p>The deployment overlay maintains the authoritative list. Typical
+    sub-processors for the public Kai SaaS: Hetzner (hosting), OpenRouter
+    (LLM routing), Resend (transactional email), Stripe (billing).</p>
+
+    <h2>Data deletion</h2>
+    <p>You can request deletion of your account and workspaces at any time.
+    Hard deletion happens within 30 days; backups roll over within 90.</p>
+
+    <h2>Contact</h2>
+    <p>See the <a href="/imprint">Imprint</a> for the data-controller address.</p>
+  </article>
+</Base>
