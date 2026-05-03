@@ -4,7 +4,7 @@ aliases:
 - TASK-014
 title: 'User account model: one user owns many workspaces (KaiInstances)'
 slug: user-account-model-one-user-owns-many-workspaces-kaiinstances
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -19,6 +19,7 @@ due_date: ''
 created: 2026-05-03
 updated: 2026-05-03
 ---
+
 
 
 # User account model: one user owns many workspaces (KaiInstances)
@@ -57,11 +58,26 @@ The current model is "1 customerSlug = 1 KaiInstance" — there is **no concept 
 - ID shape: ULIDs (lexicographic-sortable, time-prefixed) vs UUIDv7 (similar) vs Stripe-style `usr_<random>`. Default: ULIDs prefixed `u_`.
 - Email-verification gate: `email_verified_at` IS NULL → block login? Or just gate provisioning of new workspaces? Default: block login until verified.
 
+## Status
+
+**Phase 0 (`pkg/users/` + `pkg/userspg/` modules) — done** on 2026-05-03. Two new sibling Go modules following the `pkg/auth` + `pkg/authk8s` pattern: `pkg/users` ships the `Store` interface, `User` type, `Tier`/`Lang` enums, ULID-shaped ID generator (hand-rolled, zero deps), and `MemoryStore` for tests / dev mode; `pkg/userspg` ships `PoolStore` against `jackc/pgx/v5` plus the embedded `schema.sql`. 93% coverage on `pkg/users` (MemoryStore + ID generator under concurrent-mint stress). Integration tests on `pkg/userspg` guarded by `PGURL` env var; verified end-to-end against a real Postgres 16 container — all 5 tests pass including the partial-unique-index reclaim-after-soft-delete behavior. README at `pkg/users/README.md`.
+
+**Open questions — closed:**
+- ID shape: **ULID prefixed `u_`** (per PROP-001 default).
+- Email-verification gate: **block login until verified** (per PROP-001 default; enforcement happens at the call site in [[TASK-013]]).
+- Stripe customer ID column included on the User row from day one so [[TASK-016]] doesn't need a schema migration.
+
+**Remaining phases blocked on upstream tasks:**
+- Phase 1 (operator CRD `spec.userRef` + `swarm.io/user-id` label on child resources): bundled with [[TASK-012]] v1alpha2.
+- Phase 2 (customer-center / center swap from per-tenant Secret to Postgres lookup): blocked on Phase 1 (operator must label child resources before the dashboard can query by user-id) and on [[TASK-013]] (signup creates the User row in the first place).
+- Phase 3 ("your workspaces" view): blocked on Phase 1 + Phase 2.
+- Phase 4 (Postgres provisioning in production): lives in `swarm-cloud` overlay, not the public swarm repo. Hetzner managed Postgres or Neon — exact pick deferred to deploy time.
+
 ## Acceptance Criteria
-- [ ] User entity exists somewhere (CRD or DB) with stable ID, email, created-at, tier, deleted-at
-- [ ] `kubectl get kaiinstance -l swarm.io/user-id=<uid>` (or `swarm.emai.io/user-id` while pre-TASK-024) returns all of a user's workspaces
-- [ ] Customer-center "your workspaces" view shows the list
-- [ ] Existing pre-SaaS customers continue to reconcile cleanly
+- [x] User entity exists in code with stable ID, email, created-at, tier, deleted-at — `pkg/users.User` + `pkg/userspg/schema.sql` (Phase 0, 2026-05-03)
+- [ ] `kubectl get kaiinstance -l swarm.io/user-id=<uid>` (or `swarm.emai.io/user-id` while pre-TASK-024) returns all of a user's workspaces (Phase 1, blocked on TASK-012)
+- [ ] Customer-center "your workspaces" view shows the list (Phase 3)
+- [ ] Existing pre-SaaS customers continue to reconcile cleanly (Phase 1+ — `managed: internal` keeps `userRef` null)
 
 ## Notes
 This is the foundational schema decision — get it wrong and TASK-016 (billing), TASK-021 (deletion), TASK-015 (quotas) all become messy. Bundle the User decision into the PROP-001 proposal that TASK-012 will spawn.
