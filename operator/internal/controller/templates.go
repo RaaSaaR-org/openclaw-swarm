@@ -43,10 +43,15 @@ func slugify(name string) string {
 }
 
 // templateVars holds the placeholder values for template rendering.
+// Field names use the new tenant-* terminology (TASK-024 Phase 2.A);
+// the legacy `{{CUSTOMER_NAME}}`/`{{CUSTOMER_SLUG}}` template-side
+// placeholders are kept as-is for the embedded customer-template's
+// back-compat (renaming those would break existing rendered SOULs in
+// running tenants).
 type templateVars struct {
-	CustomerName string
-	CustomerSlug string
-	ProjectName  string
+	TenantName  string
+	TenantSlug  string
+	ProjectName string
 }
 
 // renderTemplate reads a template file and replaces {{PLACEHOLDERS}}.
@@ -56,8 +61,8 @@ func renderTemplate(name string, vars templateVars) (string, error) {
 		return "", fmt.Errorf("reading template %s: %w", name, err)
 	}
 	result := string(content)
-	result = strings.ReplaceAll(result, "{{CUSTOMER_NAME}}", vars.CustomerName)
-	result = strings.ReplaceAll(result, "{{CUSTOMER_SLUG}}", vars.CustomerSlug)
+	result = strings.ReplaceAll(result, "{{CUSTOMER_NAME}}", vars.TenantName)
+	result = strings.ReplaceAll(result, "{{CUSTOMER_SLUG}}", vars.TenantSlug)
 	result = strings.ReplaceAll(result, "{{PROJECT_NAME}}", vars.ProjectName)
 	return result, nil
 }
@@ -163,13 +168,13 @@ func renderSoul(vars templateVars, opts templateOpts) (string, error) {
 // display-name field, this is the friendly name we have. APP_NAME is left
 // to a future enhancement (needs metadata.yaml lookup).
 func renderCatalogPlaceholders(body string, vars templateVars) string {
-	userName := vars.CustomerName
+	userName := vars.TenantName
 	if at := strings.Index(userName, "@"); at >= 0 {
 		userName = userName[:at]
 	}
-	body = strings.ReplaceAll(body, "{{WORKSPACE_NAME}}", vars.CustomerName)
+	body = strings.ReplaceAll(body, "{{WORKSPACE_NAME}}", vars.TenantName)
 	body = strings.ReplaceAll(body, "{{USER_NAME}}", userName)
-	body = strings.ReplaceAll(body, "{{APP_NAME}}", vars.CustomerSlug)
+	body = strings.ReplaceAll(body, "{{APP_NAME}}", vars.TenantSlug)
 	return body
 }
 

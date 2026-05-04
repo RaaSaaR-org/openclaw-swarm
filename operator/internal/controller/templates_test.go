@@ -37,8 +37,8 @@ func TestSlugify(t *testing.T) {
 
 func TestRenderTemplate(t *testing.T) {
 	vars := templateVars{
-		CustomerName: "East Side Fab",
-		CustomerSlug: "east-side-fab",
+		TenantName: "East Side Fab",
+		TenantSlug: "east-side-fab",
 		ProjectName:  "Innovation Project",
 	}
 
@@ -93,8 +93,8 @@ func TestRenderTemplate(t *testing.T) {
 
 func TestRenderAllTemplates(t *testing.T) {
 	vars := templateVars{
-		CustomerName: "Test Customer",
-		CustomerSlug: "test-customer",
+		TenantName: "Test Customer",
+		TenantSlug: "test-customer",
 		ProjectName:  "Test Project",
 	}
 
@@ -141,8 +141,8 @@ func TestRenderAllTemplates(t *testing.T) {
 
 func TestOpenClawJSONValid(t *testing.T) {
 	vars := templateVars{
-		CustomerName: "Test",
-		CustomerSlug: "test",
+		TenantName: "Test",
+		TenantSlug: "test",
 		ProjectName:  "Test",
 	}
 
@@ -176,8 +176,8 @@ func TestOpenClawJSONValid(t *testing.T) {
 
 func TestConfigHash(t *testing.T) {
 	vars := templateVars{
-		CustomerName: "Test",
-		CustomerSlug: "test",
+		TenantName: "Test",
+		TenantSlug: "test",
 		ProjectName:  "Test",
 	}
 
@@ -207,8 +207,8 @@ func TestConfigHash(t *testing.T) {
 
 func TestSkillMCContents(t *testing.T) {
 	vars := templateVars{
-		CustomerName: "Test",
-		CustomerSlug: "test",
+		TenantName: "Test",
+		TenantSlug: "test",
 		ProjectName:  "Test",
 	}
 
@@ -253,7 +253,7 @@ func TestRenderAllTemplatesUsesCatalogSoulWhenAppRefSet(t *testing.T) {
 	t.Parallel()
 	catalogDir := catalogFixture(t, "writing-coach", "# {{WORKSPACE_NAME}} — Writing Coach\n\nHi {{USER_NAME}}, app={{APP_NAME}}.")
 
-	vars := templateVars{CustomerName: "alice@example.org", CustomerSlug: "alice", ProjectName: "Workspace"}
+	vars := templateVars{TenantName: "alice@example.org", TenantSlug: "alice", ProjectName: "Workspace"}
 	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: "writing-coach"})
 	if err != nil {
 		t.Fatalf("renderAllTemplates: %v", err)
@@ -274,7 +274,7 @@ func TestRenderAllTemplatesUsesCatalogSoulWhenAppRefSet(t *testing.T) {
 	// AGENTS.md and friends still come from the embedded set — only SOUL is
 	// per-persona.
 	if !strings.Contains(tmpl.AgentsMD, "alice") && !strings.Contains(tmpl.AgentsMD, "Alice") {
-		// AgentsMD uses CustomerName/CustomerSlug too, just confirm it rendered.
+		// AgentsMD uses TenantName/TenantSlug too, just confirm it rendered.
 		t.Logf("AGENTS.md content (first 100 chars): %.100s", tmpl.AgentsMD)
 	}
 }
@@ -285,7 +285,7 @@ func TestRenderAllTemplatesFallsBackWhenAppRefMissing(t *testing.T) {
 	// the embedded customer-template, NOT error. This protects against the
 	// catalog ConfigMap drifting behind a freshly-curated persona slug.
 	catalogDir := t.TempDir()
-	vars := templateVars{CustomerName: "Acme GmbH", CustomerSlug: "acme", ProjectName: "Robotik Pilot"}
+	vars := templateVars{TenantName: "Acme GmbH", TenantSlug: "acme", ProjectName: "Robotik Pilot"}
 	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: "does-not-exist"})
 	if err != nil {
 		t.Fatalf("renderAllTemplates: %v", err)
@@ -301,7 +301,7 @@ func TestRenderAllTemplatesIgnoresCatalogWhenAppRefEmpty(t *testing.T) {
 	// AppRef empty (legacy tenant) → embedded template, even if catalogDir
 	// points at a real catalog.
 	catalogDir := catalogFixture(t, "writing-coach", "# Catalog content")
-	vars := templateVars{CustomerName: "Acme GmbH", CustomerSlug: "acme", ProjectName: "X"}
+	vars := templateVars{TenantName: "Acme GmbH", TenantSlug: "acme", ProjectName: "X"}
 	tmpl, err := renderAllTemplates(vars, templateOpts{CatalogDir: catalogDir, AppRef: ""})
 	if err != nil {
 		t.Fatalf("renderAllTemplates: %v", err)
@@ -317,7 +317,7 @@ func TestRenderAllTemplatesIgnoresCatalogWhenAppRefEmpty(t *testing.T) {
 func TestRenderCatalogPlaceholdersUsesEmailLocalPart(t *testing.T) {
 	t.Parallel()
 	body := "Hello {{USER_NAME}}!"
-	got := renderCatalogPlaceholders(body, templateVars{CustomerName: "alice.smith@example.de"})
+	got := renderCatalogPlaceholders(body, templateVars{TenantName: "alice.smith@example.de"})
 	if got != "Hello alice.smith!" {
 		t.Errorf("renderCatalogPlaceholders = %q, want 'Hello alice.smith!'", got)
 	}
@@ -325,10 +325,10 @@ func TestRenderCatalogPlaceholdersUsesEmailLocalPart(t *testing.T) {
 
 func TestRenderCatalogPlaceholdersHandlesNonEmailName(t *testing.T) {
 	t.Parallel()
-	// Non-email name (e.g. internal tenant where CustomerName is "Acme GmbH"):
+	// Non-email name (e.g. internal tenant where TenantName is "Acme GmbH"):
 	// USER_NAME falls through to the full string.
 	body := "Hello {{USER_NAME}}!"
-	got := renderCatalogPlaceholders(body, templateVars{CustomerName: "Acme GmbH"})
+	got := renderCatalogPlaceholders(body, templateVars{TenantName: "Acme GmbH"})
 	if got != "Hello Acme GmbH!" {
 		t.Errorf("renderCatalogPlaceholders = %q, want 'Hello Acme GmbH!'", got)
 	}

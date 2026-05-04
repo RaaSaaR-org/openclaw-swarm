@@ -152,9 +152,9 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		model = kai.Spec.Model
 	}
 	tmpl, err := renderAllTemplates(templateVars{
-		CustomerName: kai.Spec.EffectiveName(),
-		CustomerSlug: slug,
-		ProjectName:  kai.Spec.ProjectName,
+		TenantName:  kai.Spec.EffectiveName(),
+		TenantSlug:  slug,
+		ProjectName: kai.Spec.ProjectName,
 	}, templateOpts{
 		CatalogDir: r.CatalogDir,
 		AppRef:     kai.Spec.AppRef,
