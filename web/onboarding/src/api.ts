@@ -59,6 +59,38 @@ export class ApiError extends Error {
   }
 }
 
+export interface SignupRequest {
+  email: string;
+  password: string;
+  app?: string;
+  language?: 'de' | 'en';
+  captchaToken?: string;
+}
+
+export interface SignupResponse {
+  status: 'verification_sent';
+}
+
+export interface VerifyResponse {
+  status: 'verified';
+  workspace?: string;
+}
+
+async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+  });
+  if (!res.ok) {
+    let body: unknown;
+    try { body = await res.json(); } catch { body = { error: await res.text() }; }
+    const errBody = body as { error?: string; message?: string };
+    throw new ApiError(errBody.message || errBody.error || `HTTP ${res.status}`, res.status);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
 export const api = {
   checkAuth: () => request<{ namespace: string }>('/api/auth'),
   provision: (req: ProvisionRequest) =>
@@ -66,7 +98,31 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+  signup: (req: SignupRequest) =>
+    publicRequest<SignupResponse>('/api/signup', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+  verify: (id: string, token: string) => {
+    const qs = new URLSearchParams({ id, token }).toString();
+    return publicRequest<VerifyResponse>(`/api/signup/verify?${qs}`);
+  },
 };
+
+export interface CatalogApp {
+  slug: string;
+  name: string;
+  shortDescription: string;
+}
+
+export const catalogApps: CatalogApp[] = [
+  { slug: 'personal-assistant', name: 'Personal Assistant', shortDescription: 'Plans your day, drafts replies, keeps notes.' },
+  { slug: 'coding-helper', name: 'Coding Helper', shortDescription: 'Reviews diffs, explains code, runs scripts.' },
+  { slug: 'writing-coach', name: 'Writing Coach', shortDescription: 'Edits drafts, sharpens style, clarifies structure.' },
+  { slug: 'language-tutor', name: 'Language Tutor', shortDescription: 'Practices conversation, corrects grammar, explains nuance.' },
+  { slug: 'study-buddy', name: 'Study Buddy', shortDescription: 'Quizzes you, summarizes notes, plans review sessions.' },
+  { slug: 'productivity-companion', name: 'Productivity Companion', shortDescription: 'Tracks goals, batches tasks, blocks deep work.' },
+];
 
 export function slugify(input: string): string {
   return input

@@ -9,6 +9,7 @@ import {
   slugify,
   isValidSlug,
   renderYaml,
+  catalogApps,
   type ProvisionRequest,
   type ProvisionResponse,
 } from './api';
@@ -16,13 +17,21 @@ import {
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let namespace = 'emai-swarm';
 
-if (!getToken()) {
-  renderLogin();
-} else {
-  bootstrap();
+function route() {
+  const path = location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/admin' || path.startsWith('/admin/')) {
+    if (!getToken()) renderLogin();
+    else bootstrapAdmin();
+    return;
+  }
+  if (path === '/verify') {
+    handleVerify();
+    return;
+  }
+  renderSignup();
 }
 
-async function bootstrap() {
+async function bootstrapAdmin() {
   try {
     const auth = await api.checkAuth();
     namespace = auth.namespace;
@@ -33,7 +42,6 @@ async function bootstrap() {
       renderLogin('Session expired. Sign in again.');
       return;
     }
-    // Backend unreachable but token may still be valid; enter form anyway.
     renderForm();
   }
 }
@@ -45,7 +53,7 @@ function renderLogin(error?: string) {
         <div class="login-brand">
           <span class="brand-mark">EmAI</span>
           <span class="brand-divider">·</span>
-          <span class="brand-tagline">Onboarding</span>
+          <span class="brand-tagline">Onboarding · Admin</span>
         </div>
         <h1>Sign in</h1>
         <p class="login-hint">Enter the admin token to provision a new Kai instance.</p>
@@ -71,10 +79,251 @@ function renderLogin(error?: string) {
         renderLogin('Invalid token.');
         return;
       }
-      // proceed anyway
     }
-    bootstrap();
+    bootstrapAdmin();
   });
+}
+
+interface SignupState {
+  email: string;
+  password: string;
+  app: string;
+  language: 'de' | 'en';
+  submitting: boolean;
+  error?: string;
+}
+
+const signupState: SignupState = {
+  email: '',
+  password: '',
+  app: 'personal-assistant',
+  language: 'de',
+  submitting: false,
+};
+
+function renderSignup(error?: string) {
+  signupState.error = error;
+  const appOptions = catalogApps
+    .map((a) => `
+      <label class="app-card${signupState.app === a.slug ? ' selected' : ''}">
+        <input type="radio" name="app" value="${escapeHtml(a.slug)}" ${signupState.app === a.slug ? 'checked' : ''} />
+        <span class="app-name">${escapeHtml(a.name)}</span>
+        <span class="app-desc">${escapeHtml(a.shortDescription)}</span>
+      </label>
+    `)
+    .join('');
+
+  app.innerHTML = `
+    <div class="signup-shell">
+      <form class="signup-card" id="signup-form" novalidate>
+        <div class="login-brand">
+          <span class="brand-mark">EmAI</span>
+          <span class="brand-divider">·</span>
+          <span class="brand-tagline">Create your workspace</span>
+        </div>
+        <h1>Sign up for Kai</h1>
+        <p class="login-hint">Email + password. We mail you a link, you click it, your private agent is ready in about a minute.</p>
+
+        <div class="signup-grid">
+          <div class="field">
+            <label for="email-input">Email</label>
+            <input id="email-input" type="email" placeholder="you@company.com" autocomplete="email" required value="${escapeHtml(signupState.email)}" />
+          </div>
+          <div class="field">
+            <label for="password-input">Password</label>
+            <input id="password-input" type="password" placeholder="at least 8 characters" autocomplete="new-password" minlength="8" required />
+            <p class="field-hint">Min 8 characters. We hash with argon2id; the plaintext never leaves the server.</p>
+          </div>
+          <div class="field">
+            <label>Language</label>
+            <div class="lang-toggle" role="radiogroup" aria-label="Language">
+              <button type="button" class="lang-btn${signupState.language === 'de' ? ' selected' : ''}" data-lang="de" role="radio" aria-checked="${signupState.language === 'de'}">DE — Deutsch</button>
+              <button type="button" class="lang-btn${signupState.language === 'en' ? ' selected' : ''}" data-lang="en" role="radio" aria-checked="${signupState.language === 'en'}">EN — English</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Pick your starting agent</label>
+          <p class="field-hint">You can switch or add more later. Each is a working configuration — persona, recommended model, starter prompts.</p>
+          <div class="app-grid">${appOptions}</div>
+        </div>
+
+        ${signupState.error ? `<p class="login-error" id="signup-error">${escapeHtml(signupState.error)}</p>` : '<p class="login-error" id="signup-error" hidden></p>'}
+
+        <button type="submit" class="primary-btn" id="signup-submit">Create my workspace</button>
+        <p class="signup-fineprint">By signing up you agree to the <a href="https://kai.example.org/terms">terms of service</a> and <a href="https://kai.example.org/privacy">privacy policy</a>. <a href="/admin" class="muted-link">Admin?</a></p>
+      </form>
+    </div>
+  `;
+
+  const form = document.getElementById('signup-form') as HTMLFormElement;
+  const emailEl = document.getElementById('email-input') as HTMLInputElement;
+  const passwordEl = document.getElementById('password-input') as HTMLInputElement;
+  emailEl.addEventListener('input', () => { signupState.email = emailEl.value; });
+  passwordEl.addEventListener('input', () => { signupState.password = passwordEl.value; });
+  document.querySelectorAll<HTMLButtonElement>('.lang-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      signupState.language = btn.dataset.lang === 'en' ? 'en' : 'de';
+      document.querySelectorAll<HTMLButtonElement>('.lang-btn').forEach((b) => {
+        const sel = b.dataset.lang === signupState.language;
+        b.classList.toggle('selected', sel);
+        b.setAttribute('aria-checked', String(sel));
+      });
+    });
+  });
+  document.querySelectorAll<HTMLInputElement>('input[name="app"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      signupState.app = radio.value;
+      document.querySelectorAll<HTMLLabelElement>('.app-card').forEach((c) => {
+        const input = c.querySelector('input') as HTMLInputElement;
+        c.classList.toggle('selected', input.value === signupState.app);
+      });
+    });
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (signupState.submitting) return;
+    await submitSignup();
+  });
+}
+
+async function submitSignup() {
+  const errEl = document.getElementById('signup-error')!;
+  errEl.hidden = true;
+  errEl.textContent = '';
+
+  const email = signupState.email.trim();
+  if (!email || !email.includes('@')) return showSignupError('Enter a valid email address.');
+  if (signupState.password.length < 8) return showSignupError('Password must be at least 8 characters.');
+
+  const submitBtn = document.getElementById('signup-submit') as HTMLButtonElement;
+  signupState.submitting = true;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Creating…';
+
+  try {
+    await api.signup({
+      email,
+      password: signupState.password,
+      app: signupState.app,
+      language: signupState.language,
+    });
+    renderCheckInbox(email);
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : String(err);
+    showSignupError(msg);
+  } finally {
+    signupState.submitting = false;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create my workspace';
+  }
+}
+
+function showSignupError(msg: string) {
+  signupState.error = msg;
+  const el = document.getElementById('signup-error')!;
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+function renderCheckInbox(email: string) {
+  app.innerHTML = `
+    <div class="signup-shell">
+      <div class="signup-card">
+        <div class="login-brand">
+          <span class="brand-mark">EmAI</span>
+          <span class="brand-divider">·</span>
+          <span class="brand-tagline">Almost there</span>
+        </div>
+        <h1>Check your inbox</h1>
+        <p class="check-inbox-lead">We sent a verification link to <code>${escapeHtml(email)}</code>. Click it to provision your workspace — usually under a minute.</p>
+        <ul class="check-inbox-tips">
+          <li>Link expires in 24 hours.</li>
+          <li>No mail? Check spam, then <a href="/" class="muted-link">try a different email</a>.</li>
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+async function handleVerify() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id') || '';
+  const token = params.get('token') || '';
+  if (!id || !token) {
+    renderVerifyError('Missing id or token in URL.');
+    return;
+  }
+  app.innerHTML = `
+    <div class="signup-shell">
+      <div class="signup-card">
+        <div class="login-brand">
+          <span class="brand-mark">EmAI</span>
+          <span class="brand-divider">·</span>
+          <span class="brand-tagline">Verifying…</span>
+        </div>
+        <h1>Provisioning your workspace</h1>
+        <p class="check-inbox-lead">One moment — we're confirming your email and creating your private agent.</p>
+        <div class="spinner" aria-label="Working"></div>
+      </div>
+    </div>
+  `;
+  try {
+    const res = await api.verify(id, token);
+    renderVerified(res.workspace || '');
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : String(err);
+    renderVerifyError(msg);
+  }
+}
+
+function renderVerified(workspace: string) {
+  const chatPath = workspace ? `/chat/${encodeURIComponent(workspace)}` : '';
+  const centerPath = workspace ? `/center/${encodeURIComponent(workspace)}` : '';
+  app.innerHTML = `
+    <div class="signup-shell">
+      <div class="signup-card">
+        <div class="login-brand">
+          <span class="brand-mark">EmAI</span>
+          <span class="brand-divider">·</span>
+          <span class="brand-tagline">Workspace ready</span>
+        </div>
+        <h1>You're in.</h1>
+        <p class="check-inbox-lead">Your workspace <code>${escapeHtml(workspace || '(unknown)')}</code> is provisioning. The agent typically starts answering within a minute.</p>
+        <div class="verified-actions">
+          ${chatPath ? `<a class="primary-btn link-btn" href="${escapeHtml(chatPath)}">Open chat</a>` : ''}
+          ${centerPath ? `<a class="ghost-btn link-btn" href="${escapeHtml(centerPath)}">Manage workspace</a>` : ''}
+        </div>
+        <ul class="check-inbox-tips">
+          <li>You'll need to log in to chat with the email + password you just used.</li>
+          <li>Bookmark these URLs — they're your front door.</li>
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+function renderVerifyError(msg: string) {
+  app.innerHTML = `
+    <div class="signup-shell">
+      <div class="signup-card">
+        <div class="login-brand">
+          <span class="brand-mark">EmAI</span>
+          <span class="brand-divider">·</span>
+          <span class="brand-tagline">Verification failed</span>
+        </div>
+        <h1>Something went wrong</h1>
+        <p class="login-error">${escapeHtml(msg)}</p>
+        <ul class="check-inbox-tips">
+          <li>Links expire after 24 hours — request a new one by signing up again.</li>
+          <li>If this keeps happening, the team is reachable at <a href="mailto:hello@emai.dev">hello@emai.dev</a>.</li>
+        </ul>
+        <a href="/" class="ghost-btn link-btn">Back to signup</a>
+      </div>
+    </div>
+  `;
 }
 
 interface FormState {
@@ -396,3 +645,5 @@ function escapeHtml(text: string): string {
   div.textContent = text ?? '';
   return div.innerHTML;
 }
+
+route();
