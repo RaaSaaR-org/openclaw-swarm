@@ -7,11 +7,11 @@ handlers change. CI lints them on every PR with Spectral.
 | Spec | Server | Auth | Audience |
 |---|---|---|---|
 | [admin.yaml](admin.yaml) | `web/admin-console/server` | Shared `ADMIN_TOKEN` | Platform operator |
-| [center.yaml](center.yaml) | `web/customer-center/server` | Per-tenant JWT cookie | Tenant admin |
+| [center.yaml](center.yaml) | `web/workspace/server` | Per-tenant JWT cookie | Tenant admin |
 | [onboarding.yaml](onboarding.yaml) | `web/onboarding/server` | Shared `ADMIN_TOKEN` | Platform operator (today; TASK-013 opens self-serve) |
 | [status.yaml](status.yaml) | `web/status-page/server` | Per-tenant gateway token | Anyone with the token |
 
-`web/customer-chat/server` is the WebSocket gateway-bridge — not a JSON API in
+`web/chat/server` is the WebSocket gateway-bridge — not a JSON API in
 the OpenAPI sense — and is documented in `docs/architecture.md` instead.
 
 ## Validating locally

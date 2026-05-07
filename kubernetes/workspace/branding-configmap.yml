@@ -1,0 +1,123 @@
+# Default Kai brand. Override at deploy time by replacing this ConfigMap with
+# one carrying tenant-specific theme.css / branding.json / logo.svg / favicon.svg
+# files (see your private overlay's branding/ dir + its deploy.sh per-app loop).
+# The Deployment mounts this ConfigMap with optional: true so this can be
+# replaced without manifest changes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-branding
+  namespace: emai-swarm
+  labels:
+    app: workspace
+    component: branding
+data:
+  theme.css: |
+    @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+    
+    :root {
+      --bg: #0A0D14;
+      --bg-elev: #101521;
+      --bg-raised: #171D2A;
+      --hairline: #1F2735;
+      --hairline-strong: #2C3445;
+    
+      --text: #F0F2F8;
+      --text-muted: #9098A8;
+      --text-faint: #5A6478;
+    
+      --accent: #67E8F9;
+      --accent-hover: #A5F3FC;
+      --accent-deep: #22D3EE;
+      --accent-bg: rgba(103, 232, 249, 0.08);
+      --accent-bg-hover: rgba(103, 232, 249, 0.14);
+    
+      --aurora: #A78BFA;
+      --aurora-warm: #F0ABFC;
+    
+      --alert: #FF6B6B;
+      --alert-bg: rgba(255, 107, 107, 0.15);
+      --success: #4ADE80;
+    
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 20px;
+      --r-pill: 999px;
+    
+      --font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, 'Cascadia Code', monospace;
+    
+      --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-medium: 0 2px 12px rgba(0, 0, 0, 0.45);
+      --shadow-focus: 0 0 0 3px var(--accent-bg-hover);
+    }
+  branding.json: |
+    {
+      "name": "Kai",
+      "agentName": "Kai",
+      "domain": "kai.example.org",
+      "domainUrl": "https://kai.example.org",
+      "supportEmail": "support@kai.example.org",
+      "fontFamily": "Geist",
+      "footerCredit": "Powered by OpenClaw",
+      "poweredBy": { "label": "OpenClaw", "url": "https://openclaw.ai" },
+      "logoUrl": "/branding/logo.svg",
+      "faviconUrl": "/branding/favicon.svg",
+      "copy": {
+        "chat": {
+          "docTitle": "Kai",
+          "missingSlugTitle": "Project link required",
+          "missingSlugHelp": "Need help? Reach out to the team that gave you this link.",
+          "signInTitle": "Sign in to chat with Kai",
+          "signInSubtitle": "Use the email and password your project lead shared with you.",
+          "welcomeBody": "Send a message to start working with your project assistant.",
+          "typingPlaceholder": "Message Kai…"
+        },
+        "center": {
+          "docTitleSuffix": " · Kai",
+          "missingSlugBody": "Open the project hub from the link your team shared.",
+          "briefingsTitle": "Updates from Kai",
+          "askLabel": "Ask Kai a question",
+          "whatItDoesTitle": "What Kai does for you",
+          "whereToReachTitle": "Where you can reach Kai",
+          "teamPlaceholder": "Your project team",
+          "hubDocTitle": "Hub · Kai"
+        },
+        "admin": {
+          "docTitle": "Swarm Admin Console · Kai",
+          "loginHint": "Sign in to manage Kai instances.",
+          "instancesHeading": "Kai instances"
+        },
+        "onboarding": {
+          "docTitle": "Onboard a customer · Kai",
+          "loginHint": "Sign in with your operator credentials.",
+          "signupTitle": "Sign up for Kai",
+          "provisionTitle": "Provision a Kai instance",
+          "provisionHelp": "Creates a private Kai workspace for the named project.",
+          "genericErrorContact": "Contact the team via the support address."
+        },
+        "status": {
+          "docTitlePrefix": "Status · ",
+          "docTitleSuffix": " · Kai",
+          "missingSlugBody": "Open your personal status link sent by the Kai team.",
+          "expiredLinkBody": "This status link has expired. Ask the Kai team for a fresh one."
+        }
+      }
+    }
+  logo.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 32" fill="none">
+      <g>
+        <circle cx="14" cy="10" r="2.6" fill="#67E8F9"/>
+        <circle cx="8" cy="20" r="2.6" fill="#67E8F9"/>
+        <circle cx="20" cy="20" r="2.6" fill="#67E8F9"/>
+        <path d="M14 12.6 L8 20 L20 20 Z" stroke="#67E8F9" stroke-opacity="0.35" stroke-width="0.8" fill="none"/>
+      </g>
+      <text x="32" y="22" font-family="Geist, -apple-system, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="-0.6" fill="#F0F2F8">Kai</text>
+    </svg>
+  favicon.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="11" r="2.4" fill="#67E8F9"/>
+      <circle cx="10.5" cy="20.5" r="2.4" fill="#67E8F9"/>
+      <circle cx="21.5" cy="20.5" r="2.4" fill="#67E8F9"/>
+      <path d="M16 13.4 L10.5 20.5 L21.5 20.5 Z" stroke="#67E8F9" stroke-opacity="0.35" stroke-width="0.8" fill="none"/>
+    </svg>

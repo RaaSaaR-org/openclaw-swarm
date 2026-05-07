@@ -12,6 +12,12 @@
     "verbatimModuleSyntax": false,
     "moduleDetection": "force",
     "noEmit": true,
+    "resolveJsonModule": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@branding/*": ["../shared/branding/*"]
+    },
 
     "strict": true,
     "noUnusedLocals": false,

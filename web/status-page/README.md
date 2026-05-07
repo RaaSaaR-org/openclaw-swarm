@@ -2,7 +2,7 @@
 
 Customer-facing status page that answers one question: "Is my Kai online?".
 
-URL pattern mirrors customer-chat — the customer gets a personal link they bookmark:
+URL pattern mirrors chat — the customer gets a personal link they bookmark:
 
 ```
 https://status.<host>/status/<slug>?token=<gateway-token>
@@ -95,7 +95,7 @@ The token is matched against `spec.gatewayAuth.token` on the corresponding `KaiI
 ## Security model
 
 - **No admin token.** The page is meant to be linked to from outside the cluster, often shared in customer welcome emails. Putting an admin token in a customer-facing path would be a leak waiting to happen.
-- **Per-customer auth via gateway token.** Same secret as customer-chat, so the customer doesn't need to manage two credentials.
+- **Per-customer auth via gateway token.** Same secret as chat, so the customer doesn't need to manage two credentials.
 - **Constant-time compare.** Token comparison uses `crypto/subtle` to avoid timing leaks.
 - **Uniform 401.** Wrong-slug and wrong-token both produce identical responses, so the page can't be used as an enumeration oracle.
 - **Read-only RBAC.** The ServiceAccount has `kaiinstances` `get` only. It cannot list, patch, or delete anything.

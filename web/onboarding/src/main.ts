@@ -13,9 +13,20 @@ import {
   type ProvisionRequest,
   type ProvisionResponse,
 } from './api';
+import { loadBranding, applyBranding, DEFAULT_BRANDING, type Branding } from '@branding/loader';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let namespace = 'emai-swarm';
+
+let b: Branding = DEFAULT_BRANDING;
+
+bootstrap();
+
+async function bootstrap() {
+  b = await loadBranding();
+  applyBranding(b, { docTitle: b.copy.onboarding.docTitle });
+  route();
+}
 
 function route() {
   const path = location.pathname.replace(/\/+$/, '') || '/';
@@ -51,16 +62,18 @@ function renderLogin(error?: string) {
     <div class="login-shell">
       <form class="login-card" id="login-form">
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
-          <span class="brand-tagline">Onboarding · Admin</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
+          <span class="brand-tagline">Operator console</span>
         </div>
         <h1>Sign in</h1>
-        <p class="login-hint">Enter the admin token to provision a new Kai instance.</p>
+        <p class="login-hint">${escapeHtml(b.copy.onboarding.loginHint)}</p>
         <label for="token-input" class="visually-hidden">Admin token</label>
         <input id="token-input" type="password" placeholder="Admin token" autocomplete="off" required autofocus />
         ${error ? `<p class="login-error">${escapeHtml(error)}</p>` : ''}
-        <button type="submit">Continue</button>
+        <button type="submit">Sign in</button>
       </form>
     </div>
   `;
@@ -117,11 +130,13 @@ function renderSignup(error?: string) {
     <div class="signup-shell">
       <form class="signup-card" id="signup-form" novalidate>
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
           <span class="brand-tagline">Create your workspace</span>
         </div>
-        <h1>Sign up for Kai</h1>
+        <h1>${escapeHtml(b.copy.onboarding.signupTitle)}</h1>
         <p class="login-hint">Email + password. We mail you a link, you click it, your private agent is ready in about a minute.</p>
 
         <div class="signup-grid">
@@ -233,14 +248,16 @@ function renderCheckInbox(email: string) {
     <div class="signup-shell">
       <div class="signup-card">
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
-          <span class="brand-tagline">Almost there</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
+          <span class="brand-tagline">Email sent</span>
         </div>
         <h1>Check your inbox</h1>
         <p class="check-inbox-lead">We sent a verification link to <code>${escapeHtml(email)}</code>. Click it to provision your workspace — usually under a minute.</p>
         <ul class="check-inbox-tips">
-          <li>Link expires in 24 hours.</li>
+          <li>The link expires in 24 hours.</li>
           <li>No mail? Check spam, then <a href="/" class="muted-link">try a different email</a>.</li>
         </ul>
       </div>
@@ -258,15 +275,17 @@ async function handleVerify() {
   }
   app.innerHTML = `
     <div class="signup-shell">
-      <div class="signup-card">
+      <div class="signup-card loading">
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
-          <span class="brand-tagline">Verifying…</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
+          <span class="brand-tagline">Verifying</span>
         </div>
+        <div class="indicator loading-state" aria-hidden="true">${indicatorMarkSVG()}</div>
         <h1>Provisioning your workspace</h1>
         <p class="check-inbox-lead">One moment — we're confirming your email and creating your private agent.</p>
-        <div class="spinner" aria-label="Working"></div>
       </div>
     </div>
   `;
@@ -284,20 +303,23 @@ function renderVerified(workspace: string) {
   const centerPath = workspace ? `/center/${encodeURIComponent(workspace)}` : '';
   app.innerHTML = `
     <div class="signup-shell">
-      <div class="signup-card">
-        <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
+      <div class="signup-card verified">
+        <div class="login-brand" style="align-self:stretch;">
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
           <span class="brand-tagline">Workspace ready</span>
         </div>
-        <h1>You're in.</h1>
-        <p class="check-inbox-lead">Your workspace <code>${escapeHtml(workspace || '(unknown)')}</code> is provisioning. The agent typically starts answering within a minute.</p>
+        <div class="indicator lg active" aria-hidden="true">${indicatorMarkSVG()}</div>
+        <h1>Your workspace is ready.</h1>
+        <p class="check-inbox-lead">Workspace <code>${escapeHtml(workspace || '(unknown)')}</code> is provisioning. The agent typically starts answering within a minute.</p>
         <div class="verified-actions">
           ${chatPath ? `<a class="primary-btn link-btn" href="${escapeHtml(chatPath)}">Open chat</a>` : ''}
           ${centerPath ? `<a class="ghost-btn link-btn" href="${escapeHtml(centerPath)}">Manage workspace</a>` : ''}
         </div>
         <ul class="check-inbox-tips">
-          <li>You'll need to log in to chat with the email + password you just used.</li>
+          <li>Sign in to the chat with the email and password you just used.</li>
           <li>Bookmark these URLs — they're your front door.</li>
         </ul>
       </div>
@@ -308,19 +330,23 @@ function renderVerified(workspace: string) {
 function renderVerifyError(msg: string) {
   app.innerHTML = `
     <div class="signup-shell">
-      <div class="signup-card">
+      <div class="signup-card verify-error">
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
           <span class="brand-tagline">Verification failed</span>
         </div>
         <h1>Something went wrong</h1>
         <p class="login-error">${escapeHtml(msg)}</p>
         <ul class="check-inbox-tips">
           <li>Links expire after 24 hours — request a new one by signing up again.</li>
-          <li>If this keeps happening, the team is reachable at <a href="mailto:hello@emai.dev">hello@emai.dev</a>.</li>
+          <li>If this keeps happening, the team is reachable at <a href="mailto:${escapeHtml(b.supportEmail)}">${escapeHtml(b.supportEmail)}</a>.</li>
         </ul>
-        <a href="/" class="ghost-btn link-btn">Back to signup</a>
+        <div class="verified-actions" style="justify-content:flex-start;">
+          <a href="/" class="ghost-btn link-btn">Back to signup</a>
+        </div>
       </div>
     </div>
   `;
@@ -355,18 +381,20 @@ function renderForm() {
     <div class="onboard-shell">
       <header class="onboard-header">
         <div class="header-left">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
-          <span class="brand-tagline">Swarm Onboarding</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
+          <span class="brand-tagline">Operator console</span>
         </div>
         <div class="header-right">
-          <span class="namespace-badge">ns: ${escapeHtml(namespace)}</span>
-          <button class="ghost-btn" id="logout-btn">Sign out</button>
+          <span class="namespace-badge">ns · ${escapeHtml(namespace)}</span>
+          <button class="ghost-btn small" id="logout-btn">Sign out</button>
         </div>
       </header>
       <main class="onboard-main">
         <section class="panel panel-form">
-          <div class="panel-header"><h2>Provision a Kai instance</h2></div>
+          <div class="panel-header"><h2>${escapeHtml(b.copy.onboarding.provisionTitle)}</h2></div>
           <form id="provision-form" class="provision-form" novalidate>
             <div class="field">
               <label for="customerName">Customer name</label>
@@ -384,16 +412,16 @@ function renderForm() {
               <label for="customerSlug">Slug</label>
               <input id="customerSlug" name="customerSlug" type="text" required maxlength="63"
                 placeholder="acme-gmbh" autocomplete="off" pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" />
-              <p class="field-hint" id="slug-hint">DNS-safe identifier. Auto-derived from customer name.</p>
+              <p class="field-hint" id="slug-hint">DNS-safe identifier · auto-derived from customer name.</p>
             </div>
             <div class="field">
-              <label for="model">Model <span class="field-optional">(optional)</span></label>
+              <label for="model">Model <span class="field-optional">optional</span></label>
               <input id="model" name="model" type="text" placeholder="openrouter/anthropic/claude-sonnet-4-6"
                 autocomplete="off" />
               <p class="field-hint">Leave empty to use the operator default.</p>
             </div>
             <div class="field">
-              <label for="telegramSecretRef">Telegram bot secret <span class="field-optional">(optional)</span></label>
+              <label for="telegramSecretRef">Telegram bot secret <span class="field-optional">optional</span></label>
               <input id="telegramSecretRef" name="telegramSecretRef" type="text" placeholder="kai-acme-telegram"
                 autocomplete="off" />
               <p class="field-hint">Name of an existing Secret with key <code>bot-token</code>. Skip to disable Telegram.</p>
@@ -594,7 +622,7 @@ function showSuccess(result: ProvisionResponse) {
     <div class="success-section">
       <h3>Customer chat URL</h3>
       <code class="token-value">${escapeHtml(chatPath)}</code>
-      <p class="field-hint">Append this path to the customer-chat host the customer should reach.</p>
+      <p class="field-hint">Append this path to the chat host the customer should reach.</p>
     </div>
     <div class="success-section">
       <h3>Next steps</h3>
@@ -646,4 +674,16 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-route();
+// The Kai brand mark — three nodes in triangle inside a faint circle.
+// Lifted from status-page so the verified/loading states feel continuous
+// with the rest of the product. Per brand.md §5.
+function indicatorMarkSVG(): string {
+  return `
+    <svg viewBox="0 0 100 100" class="indicator-mark" aria-hidden="true">
+      <circle class="ring" cx="50" cy="50" r="42" />
+      <circle class="node n1" cx="50" cy="22" r="7" />
+      <circle class="node n2" cx="24" cy="64" r="7" />
+      <circle class="node n3" cx="76" cy="64" r="7" />
+    </svg>
+  `;
+}

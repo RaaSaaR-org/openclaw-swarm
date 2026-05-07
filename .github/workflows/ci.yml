@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [customer-chat, customer-center, admin-console, onboarding, status-page]
+        app: [chat, workspace, admin-console, onboarding, status-page]
     defaults:
       run:
         working-directory: web/${{ matrix.app }}
@@ -153,15 +153,15 @@ jobs:
           - app: operator
             context: operator
             dockerfile: operator/Dockerfile
-          # customer-chat / customer-center / onboarding build from the repo
+          # chat / workspace / onboarding build from the repo
           # root because their Dockerfiles COPY the shared pkg/ modules
           # (pkg/auth from TASK-004; pkg/email + pkg/users added in TASK-013).
-          - app: customer-chat
+          - app: chat
             context: .
-            dockerfile: web/customer-chat/Dockerfile
-          - app: customer-center
+            dockerfile: web/chat/Dockerfile
+          - app: workspace
             context: .
-            dockerfile: web/customer-center/Dockerfile
+            dockerfile: web/workspace/Dockerfile
           - app: admin-console
             context: web/admin-console
             dockerfile: web/admin-console/Dockerfile

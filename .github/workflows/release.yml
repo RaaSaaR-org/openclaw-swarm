@@ -58,23 +58,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # customer-chat / customer-center / onboarding build from the repo
-          # root because their Dockerfiles COPY the shared pkg/ modules
-          # (pkg/auth from TASK-004; pkg/email + pkg/users added in TASK-013).
-          - app: customer-chat
+          # All web apps build from the repo root: their Dockerfiles COPY
+          # the shared pkg/ modules (pkg/auth from TASK-004; pkg/email +
+          # pkg/users added in TASK-013) and web/shared/ branding contract.
+          - app: chat
             context: .
-            dockerfile: web/customer-chat/Dockerfile
-          - app: customer-center
+            dockerfile: web/chat/Dockerfile
+          - app: workspace
             context: .
-            dockerfile: web/customer-center/Dockerfile
+            dockerfile: web/workspace/Dockerfile
           - app: admin-console
-            context: web/admin-console
+            context: .
             dockerfile: web/admin-console/Dockerfile
           - app: onboarding
             context: .
             dockerfile: web/onboarding/Dockerfile
           - app: status-page
-            context: web/status-page
+            context: .
             dockerfile: web/status-page/Dockerfile
     steps:
       - uses: actions/checkout@v4

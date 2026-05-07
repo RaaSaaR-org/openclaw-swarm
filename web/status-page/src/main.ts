@@ -1,4 +1,7 @@
 import './style.css';
+import { loadBranding, applyBranding, DEFAULT_BRANDING, type Branding } from '@branding/loader';
+
+let b: Branding = DEFAULT_BRANDING;
 
 interface PublicStatus {
   customerName: string;
@@ -24,55 +27,91 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 let refreshTimer: number | undefined;
 let lastFetched = 0;
 
-if (!slug || !token) {
-  renderError(
-    'Status link required',
-    'Open the personal status link sent by your EmAI team. The URL should look like ' +
-      '<code>/status/&lt;your-project&gt;?token=&hellip;</code>',
-  );
-} else {
-  bootstrap();
-}
+bootstrap();
 
 async function bootstrap() {
+  b = await loadBranding();
+  applyBranding(b);
+  if (!slug || !token) {
+    renderError(
+      'Status link required',
+      `${b.copy.status.missingSlugBody} The URL should look like <code>/status/&lt;your-project&gt;?token=&hellip;</code>`,
+    );
+    return;
+  }
   renderShell();
   await refresh(true);
   refreshTimer = window.setInterval(() => refresh(false), REFRESH_MS);
 }
 
 function renderShell() {
-  document.title = `Status — ${humanize(slug)} · EmAI`;
+  document.title = `${b.copy.status.docTitlePrefix}${humanize(slug)}${b.copy.status.docTitleSuffix}`;
   app.innerHTML = `
     <div class="status-shell">
       <header class="status-header">
-        <span class="brand-mark">EmAI</span>
-        <span class="brand-divider">·</span>
+        <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+          <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+          <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+        </a>
         <span class="brand-tagline">Status</span>
       </header>
       <main class="status-main" id="status-main">
-        <div class="loading">Checking…</div>
+        ${loadingHTML()}
       </main>
       <footer class="status-footer">
         <span id="last-checked-line">Checking…</span>
-        <span class="dot-sep">·</span>
-        <a href="https://emai.dev" target="_blank" rel="noopener">emai.dev</a>
+        <a href="${escapeHtml(b.domainUrl)}" target="_blank" rel="noopener">${escapeHtml(b.domain)}</a>
       </footer>
     </div>
+  `;
+}
+
+// The Kai brand mark — three nodes in triangle inside a faint circle.
+// At display scale this becomes the live status indicator. brand.md §5.
+function indicatorMarkSVG(): string {
+  return `
+    <svg viewBox="0 0 100 100" class="indicator-mark" aria-hidden="true">
+      <circle class="ring" cx="50" cy="50" r="42" />
+      <circle class="node n1" cx="50" cy="22" r="7" />
+      <circle class="node n2" cx="24" cy="64" r="7" />
+      <circle class="node n3" cx="76" cy="64" r="7" />
+    </svg>
+  `;
+}
+
+function loadingHTML(): string {
+  return `
+    <div class="loading" role="status" aria-live="polite">
+      <svg viewBox="0 0 100 100" class="loading-mark" aria-hidden="true">
+        <circle class="ring" cx="50" cy="50" r="42" />
+        <circle class="node n1" cx="50" cy="22" r="7" />
+        <circle class="node n2" cx="24" cy="64" r="7" />
+        <circle class="node n3" cx="76" cy="64" r="7" />
+      </svg>
+      <span>Checking signal</span>
+    </div>
+  `;
+}
+
+function alertIconSVG(): string {
+  return `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
   `;
 }
 
 async function refresh(showSpinner: boolean) {
   const main = document.getElementById('status-main');
   if (!main) return;
-  if (showSpinner) main.innerHTML = '<div class="loading">Checking…</div>';
+  if (showSpinner) main.innerHTML = loadingHTML();
 
   try {
     const res = await fetch(`/api/status/${encodeURIComponent(slug)}?token=${encodeURIComponent(token)}`);
     if (res.status === 401) {
-      renderError(
-        'Status link not valid',
-        'This status link is missing, expired, or wrong. Please use the link sent by your EmAI team.',
-      );
+      renderError('Status link not valid', b.copy.status.expiredLinkBody);
       stopRefresh();
       return;
     }
@@ -106,7 +145,7 @@ function renderStatus(s: PublicStatus) {
   main.innerHTML = `
     <div class="status-card">
       <div class="status-indicator status-${escapeHtml(s.status)}" aria-hidden="true">
-        <div class="indicator-dot"></div>
+        ${indicatorMarkSVG()}
       </div>
       <div class="status-headline">${escapeHtml(statusLabel[s.status] || s.status)}</div>
       <p class="status-message">${escapeHtml(s.message)}</p>
@@ -123,7 +162,7 @@ function renderStatus(s: PublicStatus) {
         ` : ''}
         <div class="meta-row">
           <span class="meta-key">Last update</span>
-          <span class="meta-val">${formatTime(s.lastUpdate)}</span>
+          <span class="meta-val">${escapeHtml(formatTime(s.lastUpdate))}</span>
         </div>
       </div>
     </div>
@@ -132,17 +171,19 @@ function renderStatus(s: PublicStatus) {
 
 function renderError(title: string, message: string) {
   const main = document.getElementById('status-main') || app;
-  document.title = `Status — EmAI`;
+  document.title = `${b.copy.status.docTitlePrefix.replace(/\s·\s$/, '')}${b.copy.status.docTitleSuffix}`;
   if (main === app) {
     app.innerHTML = `
       <div class="status-shell">
         <header class="status-header">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
           <span class="brand-tagline">Status</span>
         </header>
         <main class="status-main">${errorBlock(title, message)}</main>
-        <footer class="status-footer"><a href="https://emai.dev" target="_blank" rel="noopener">emai.dev</a></footer>
+        <footer class="status-footer"><a href="${escapeHtml(b.domainUrl)}" target="_blank" rel="noopener">${escapeHtml(b.domain)}</a></footer>
       </div>
     `;
   } else {
@@ -153,9 +194,7 @@ function renderError(title: string, message: string) {
 function errorBlock(title: string, message: string): string {
   return `
     <div class="status-card error">
-      <div class="status-indicator status-issue" aria-hidden="true">
-        <div class="indicator-dot"></div>
-      </div>
+      <div class="error-icon" aria-hidden="true">${alertIconSVG()}</div>
       <div class="status-headline">${escapeHtml(title)}</div>
       <p class="status-message">${message}</p>
     </div>

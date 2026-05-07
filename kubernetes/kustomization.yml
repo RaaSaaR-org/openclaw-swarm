@@ -14,8 +14,8 @@ resources:
   - admin-console
   - onboarding
   - status-page
-  - customer-center
-  - customer-chat
+  - workspace
+  - chat
 
 commonLabels:
   app.kubernetes.io/part-of: emai-swarm

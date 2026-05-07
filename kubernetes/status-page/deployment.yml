@@ -30,6 +30,8 @@ spec:
               value: ":8080"
             - name: SWARM_NAMESPACE
               value: "emai-swarm"
+            - name: BRANDING_DIR
+              value: "/branding"
           resources:
             requests:
               memory: "32Mi"
@@ -55,3 +57,12 @@ spec:
             runAsNonRoot: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: branding
+              mountPath: /branding
+              readOnly: true
+      volumes:
+        - name: branding
+          configMap:
+            name: status-page-branding
+            optional: true

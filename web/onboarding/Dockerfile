@@ -1,10 +1,13 @@
 # Build context is the swarm repo root (so the COPY commands can reach the
 # sibling pkg/ modules that go.mod's replace directives point to —
-# pkg/auth, pkg/email, pkg/users since TASK-013 Phase 0).
+# pkg/auth, pkg/email, pkg/users since TASK-013 Phase 0 — and the sibling
+# web/shared/ branding contract).
 # CI/release wire this up via -f web/onboarding/Dockerfile + context: .
 
 FROM node:22-alpine AS web-build
 WORKDIR /web
+COPY web/shared ./shared
+WORKDIR /web/onboarding
 COPY web/onboarding/package.json web/onboarding/package-lock.json ./
 RUN npm ci
 COPY web/onboarding/tsconfig.json web/onboarding/vite.config.ts web/onboarding/index.html ./
@@ -19,7 +22,7 @@ WORKDIR /src/web/onboarding/server
 COPY web/onboarding/server/go.mod web/onboarding/server/go.sum ./
 RUN go mod download
 COPY web/onboarding/server/*.go ./
-COPY --from=web-build /web/dist ./web
+COPY --from=web-build /web/onboarding/dist ./web
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /onboarding .
 
 FROM gcr.io/distroless/static-debian12:nonroot

@@ -250,7 +250,7 @@ func TestCommonLabelsCarriesBothLegacyAndNewTenantLabel(t *testing.T) {
 	t.Parallel()
 	got := commonLabels("acme")
 	// Legacy label must remain so existing NetworkPolicy podSelector and any
-	// kubectl filters in swarm-emai/swarm-config keep working until the
+	// kubectl filters in swarm-emai keep working until the
 	// v1alpha2 CRD bump (TASK-012) flips them in lockstep.
 	if got["emai.io/customer"] != "acme" {
 		t.Errorf("emai.io/customer = %q, want acme (legacy label must survive Phase 1)", got["emai.io/customer"])

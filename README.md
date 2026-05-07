@@ -62,7 +62,7 @@ cd docker && docker compose up -d
 | Component | What | Stack |
 |-----------|------|-------|
 | [**Swarm Operator**](operator/) | K8s operator — reconciles `KaiInstance` CRDs into Deployments, Services, PVCs, NetworkPolicies, Ingresses | Go, Kubebuilder |
-| [**Customer Chat**](web/customer-chat/) | Web chat frontend with Ed25519 device auth | Vite, TypeScript |
+| [**Chat**](web/chat/) | Web chat frontend with Ed25519 device auth | Vite, TypeScript |
 | [**Agent Templates**](agents/) | Identity files (SOUL.md, AGENTS.md, HEARTBEAT.md) and OpenClaw config templates | Markdown, JSON |
 | [**swarm-ctl**](scripts/swarm-ctl.sh) | CLI wrapper for managing KaiInstance resources | Bash |
 
@@ -129,7 +129,7 @@ swarm/
 │   ├── api/v1alpha1/       # KaiInstance CRD types
 │   ├── internal/controller/# Reconciliation + templates
 │   └── config/             # CRD, RBAC, manager manifests
-├── web/customer-chat/      # Chat UI (Vite + TypeScript)
+├── web/chat/      # Chat UI (Vite + TypeScript)
 ├── kubernetes/             # Base K8s manifests (central agent, RBAC)
 ├── agents/
 │   ├── central/            # Central agent defaults

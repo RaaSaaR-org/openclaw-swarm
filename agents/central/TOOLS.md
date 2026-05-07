@@ -43,7 +43,7 @@ mc -y validate                            # Check repo structure
 Kai instances run MC in standalone mode on their own workspace. Data is synced with HQ via `swarm-sync`:
 - **Upstream:** Kai tasks/meetings/contacts → HQ `customers/CUST-XXX/`
 - **Downstream:** HQ customer data → Kai workspace
-- Sync runs on demand via `swarm-sync.sh` (in swarm-config/scripts/)
+- Sync runs on demand via `swarm-sync.sh` (bundled into the central pod by your private overlay's deploy script)
 
 **Important:** Kira has the complete view of all customers. Never share one customer's data with another.
 

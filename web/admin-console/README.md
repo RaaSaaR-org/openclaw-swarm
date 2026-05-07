@@ -24,7 +24,7 @@ admin-console/
 ├── src/            # Vite/TS frontend
 │   ├── main.ts     # app shell, login, table, detail, modals
 │   ├── api.ts      # fetch wrapper + token storage
-│   └── style.css   # dark theme matching customer-chat
+│   └── style.css   # dark theme matching chat
 ├── index.html
 ├── package.json
 ├── vite.config.ts

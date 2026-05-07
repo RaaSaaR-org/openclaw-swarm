@@ -93,8 +93,8 @@ endpoints return the expected `resource_missing` errors.
 ## What's not in scope here
 
 - Web-app webhook handler endpoint (a `POST /api/billing/webhook` in
-  `web/billing/server` or `web/customer-center/server`) — Phase 1.
-- Customer-center "Upgrade" button + tier swap UI — Phase 1.
+  `web/billing/server` or `web/workspace/server`) — Phase 1.
+- Workspace "Upgrade" button + tier swap UI — Phase 1.
 - Stripe Customer Portal session creation (the SDK's
   `billingportal/session` endpoint — small, will land alongside the UI).
 - Dunning state machine (3-retries / 14-day downgrade) — Phase 2.

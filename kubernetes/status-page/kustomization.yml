@@ -8,3 +8,4 @@ resources:
   - rbac.yml
   - deployment.yml
   - service.yml
+  - branding-configmap.yml

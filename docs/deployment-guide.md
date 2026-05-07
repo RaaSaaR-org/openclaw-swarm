@@ -2,38 +2,40 @@
 
 ## Configuration: Public vs Private
 
-Swarm separates **platform code** (this repo, public) from **business configuration** (private config repo).
+Swarm separates **platform code** (this repo, public) from **deployment configuration** (a private overlay repo you own).
 
 | Repo | Contains | Visibility |
 |------|----------|------------|
 | `swarm/` | Platform code, operator, templates, chat UI, K8s manifests | Public |
-| `swarm-config/` (or `swarm-emai`/`swarm-cloud` after [[TASK-023]]) | Agent identities (SOUL.md), tenant data, secrets, deploy script | Private |
+| Your private overlay (e.g. `mycorp-config`) | Agent identities (SOUL.md), tenant data, secrets, deploy script | Private |
 
-### Private config repo structure
+### Private overlay structure
+
+A typical overlay sits next to `swarm/` as a sibling directory:
 
 ```
-swarm-config/                # legacy name; renames to swarm-emai per TASK-024
+<your-overlay>/
 ├── agents/central/          # Central agent identity (SOUL.md, IDENTITY.md, etc.)
-├── customers/<slug>/        # Per-tenant SOUL.md and config overrides (legacy dir name)
+├── customers/<slug>/        # Per-tenant SOUL.md and config overrides
 ├── secrets/.env             # API keys, tokens (gitignored)
 └── deploy.sh                # Deploys config to K8s cluster
 ```
 
-The `deploy.sh` script creates ConfigMaps from the private config, falling back to the generic templates in the public `swarm/` repo for any missing files.
+The overlay's `deploy.sh` creates ConfigMaps from your private files, falling back to the generic templates in the public `swarm/` repo for any missing files. EmAI's own overlay is published separately (see `swarm-emai`); use it as a reference shape, not a dependency.
 
 ### Setup
 
 ```bash
 # Clone both repos side-by-side
 git clone <public-swarm-repo> swarm
-git clone <private-config-repo> swarm-config
+git clone <your-private-overlay> <your-overlay>
 
 # Configure secrets
-cp swarm-config/secrets/.env.example swarm-config/secrets/.env
+cp <your-overlay>/secrets/.env.example <your-overlay>/secrets/.env
 # Edit .env with real API keys
 
 # Deploy
-cd swarm-config && ./deploy.sh
+cd <your-overlay> && ./deploy.sh
 ```
 
 ---
@@ -250,12 +252,12 @@ swarm-ctl delete <slug>           # Delete + cascade cleanup
 
 ### Chat UI
 
-The tenant-facing web chat is at `web/customer-chat/` (legacy dir name —
+The tenant-facing web chat is at `web/chat/` (legacy dir name —
 renames to `web/chat/` in [[TASK-024]] Phase 4):
 
 ```bash
 # Dev server
-cd web/customer-chat && npm install && npm run dev
+cd web/chat && npm install && npm run dev
 
 # Access:
 # http://localhost:3000/chat/<slug>
@@ -264,9 +266,9 @@ cd web/customer-chat && npm install && npm run dev
 
 For production, build and deploy as a Docker container:
 ```bash
-cd web/customer-chat
-docker build -t customer-chat .
-kubectl apply -f kubernetes/customer-chat/
+cd web/chat
+docker build -t chat .
+kubectl apply -f kubernetes/chat/
 ```
 
 ### Network isolation

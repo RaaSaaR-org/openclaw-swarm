@@ -92,4 +92,4 @@ Validation runs before the K8s call, so empty/invalid input always returns 400 r
 
 ## What this is not
 
-This is the **technical** provisioning step only — it creates the K8s resource and lets the operator reconcile it into a running pod. It does not handle the broader customer onboarding flow: USER.md contacts, SOUL.md persona overrides, swarm-config customer files, or `.env` secrets. For the full flow see `scripts/new-customer.sh` (writes to the private `swarm-config/` repo).
+This is the **technical** provisioning step only — it creates the K8s resource and lets the operator reconcile it into a running pod. It does not handle the broader tenant onboarding flow: USER.md contacts, SOUL.md persona overrides, per-tenant overlay files, or `.env` secrets. For the full flow see `scripts/new-customer.sh` (writes into the private overlay repo you point it at via `--output`).

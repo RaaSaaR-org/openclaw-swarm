@@ -31,8 +31,8 @@ Customer instances are managed by the **Swarm Operator** via `KaiInstance` CRDs.
 - **OpenRouter**: LLM provider. Configurable model per instance.
 - **Swarm Operator**: K8s operator (Go/Kubebuilder) that reconciles `KaiInstance` CRDs into workloads.
 - **swarm-ctl**: CLI wrapper for kubectl — the central agent uses it to provision/manage customer instances.
-- **Customer Chat UI**: Vite + TypeScript web chat at `web/customer-chat/` — connects via WebSocket with Ed25519 device auth.
-- **Private config repo**: Deployments typically have a sibling `swarm-config/` repo with business-specific overlays (secrets, customer identities, K8s manifest overrides). This repo is the generic platform only.
+- **Chat UI**: Vite + TypeScript web chat at `web/chat/` — connects via WebSocket with Ed25519 device auth.
+- **Private overlay repo**: Deployments typically have a sibling private repo (you choose the name) with business-specific overlays (secrets, customer identities, K8s manifest overrides). This repo is the generic platform only.
 
 ## Directory Layout
 
@@ -49,7 +49,7 @@ swarm/
 │   └── customer-template/         # Templates with {{PLACEHOLDERS}} for new customers
 ├── demo/                          # Demo customer instances with sample data
 ├── web/
-│   └── customer-chat/             # Customer-facing chat UI (Vite + TypeScript)
+│   └── chat/             # Customer-facing chat UI (Vite + TypeScript)
 │       ├── src/gateway.ts         # OpenClaw WebSocket client
 │       ├── src/device.ts          # Ed25519 keypair + challenge signing
 │       ├── src/main.ts            # Chat app with markdown rendering
@@ -77,9 +77,9 @@ The `operator/` directory contains a Kubernetes Operator (Go + Kubebuilder) that
 - **RBAC:** Central agent can only manage KaiInstance CRs; customer pods get no K8s API access (`automountServiceAccountToken: false`)
 - **Dev:** `k3d cluster create swarm`, then `cd operator && make install && make run`
 
-## Customer Chat UI
+## Chat UI
 
-The `web/customer-chat/` directory contains a customer-facing web chat:
+The `web/chat/` directory contains a customer-facing web chat:
 
 - Connects to OpenClaw gateway via WebSocket with Ed25519 device identity (required since protocol v3)
 - Device keypair stored in IndexedDB, challenge-response signed with nonce
@@ -89,7 +89,7 @@ The `web/customer-chat/` directory contains a customer-facing web chat:
 
 ```bash
 # Dev
-cd web/customer-chat && npm install && npm run dev
+cd web/chat && npm install && npm run dev
 # Opens at http://localhost:3000
 ```
 

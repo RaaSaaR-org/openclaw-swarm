@@ -1,5 +1,0 @@
-node_modules/
-dist/
-server/web/*
-!server/web/.gitkeep
-server/customer-center

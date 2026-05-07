@@ -1,0 +1,32 @@
+# workspace reads KaiInstances (to validate the gateway token + read
+# customer-link annotations), per-customer briefing/profile ConfigMaps, and
+# manages the per-customer kai-<slug>-users Secret (Team-access panel).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace
+  namespace: emai-swarm
+rules:
+  - apiGroups: ["swarm.emai.io"]
+    resources: ["kaiinstances"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace
+  namespace: emai-swarm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workspace
+subjects:
+  - kind: ServiceAccount
+    name: workspace
+    namespace: emai-swarm

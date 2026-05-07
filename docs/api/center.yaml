@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Swarm Customer Center API
+  title: Swarm Workspace API
   version: 0.1.0
   description: |
     Tenant-admin dashboard API. Per-tenant JWT cookie issued by the login
-    endpoint (`kai-session`); same cookie shape as customer-chat so a login on
+    endpoint (`kai-session`); same cookie shape as chat so a login on
     one is honored by the other when they share an origin.
 
     Bootstrap-admin flow: when the per-tenant users Secret is empty, the first

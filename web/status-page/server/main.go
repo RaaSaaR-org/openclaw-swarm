@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -74,6 +75,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("static fs: %v", err)
 	}
+	brandingFS, err := fs.Sub(webFS, "web/branding")
+	if err != nil {
+		log.Fatalf("branding fs: %v", err)
+	}
+	mux.Handle("GET /branding/", http.StripPrefix("/branding/", brandingHandler{
+		overrideDir: os.Getenv("BRANDING_DIR"),
+		defaults:    brandingFS,
+	}))
 	mux.Handle("/", spaHandler{root: staticFS})
 
 	log.Printf("status-page listening on %s (namespace=%s)", addr, namespace)
@@ -229,6 +238,32 @@ func envDefault(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// brandingHandler serves /branding/* — override from disk if BRANDING_DIR is
+// set and the requested file exists there, otherwise fall back to embedded
+// defaults.
+type brandingHandler struct {
+	overrideDir string
+	defaults    fs.FS
+}
+
+func (h brandingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	if h.overrideDir != "" {
+		p := filepath.Join(h.overrideDir, filepath.Clean("/"+name))
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, p)
+			return
+		}
+	}
+	if _, err := fs.Stat(h.defaults, name); err == nil {
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFileFS(w, r, h.defaults, name)
+		return
+	}
+	http.NotFound(w, r)
 }
 
 type spaHandler struct{ root fs.FS }

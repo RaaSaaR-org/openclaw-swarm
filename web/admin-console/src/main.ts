@@ -1,14 +1,23 @@
 import './style.css';
 import { api, AuthError, clearToken, getToken, setToken, type InstanceSummary } from './api';
+import { loadBranding, applyBranding, DEFAULT_BRANDING, type Branding } from '@branding/loader';
 
 const REFRESH_MS = 5000;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-if (!getToken()) {
-  renderLogin();
-} else {
-  renderConsole();
+let b: Branding = DEFAULT_BRANDING;
+
+bootstrap();
+
+async function bootstrap() {
+  b = await loadBranding();
+  applyBranding(b, { docTitle: b.copy.admin.docTitle });
+  if (!getToken()) {
+    renderLogin();
+  } else {
+    renderConsole();
+  }
 }
 
 function renderLogin(error?: string) {
@@ -16,16 +25,18 @@ function renderLogin(error?: string) {
     <div class="login-shell">
       <form class="login-card" id="login-form">
         <div class="login-brand">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
-          <span class="brand-tagline">Swarm Admin</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
+          <span class="brand-tagline">Operator console</span>
         </div>
         <h1>Sign in</h1>
-        <p class="login-hint">Enter the admin token to manage Kai instances.</p>
+        <p class="login-hint">${escapeHtml(b.copy.admin.loginHint)}</p>
         <label for="token-input" class="visually-hidden">Admin token</label>
         <input id="token-input" type="password" placeholder="Admin token" autocomplete="off" required autofocus />
         ${error ? `<p class="login-error">${escapeHtml(error)}</p>` : ''}
-        <button type="submit">Continue</button>
+        <button type="submit">Sign in</button>
       </form>
     </div>
   `;
@@ -68,29 +79,34 @@ function renderConsole() {
     <div class="admin-shell">
       <header class="admin-header">
         <div class="header-left">
-          <span class="brand-mark">EmAI</span>
-          <span class="brand-divider">·</span>
+          <a class="brand-lockup" href="/" aria-label="${escapeHtml(b.name)}">
+            <img class="brand-lockup-mark" src="${escapeHtml(b.faviconUrl)}" alt="" />
+            <span class="brand-lockup-word">${escapeHtml(b.name)}</span>
+          </a>
           <span class="brand-tagline">Swarm Admin</span>
         </div>
         <div class="header-right">
-          <span class="refresh-indicator" id="refresh-indicator" title="Auto-refresh"></span>
-          <button class="ghost-btn" id="logout-btn">Sign out</button>
+          <span class="live-badge refresh-indicator" id="refresh-indicator" title="Auto-refreshes every 5 seconds">
+            <span class="live-dot"></span>
+            <span class="live-label">Live · 5s</span>
+          </span>
+          <button class="ghost-btn small" id="refresh-btn" title="Refresh now">Refresh</button>
+          <button class="ghost-btn small" id="logout-btn">Sign out</button>
         </div>
       </header>
       <main class="admin-main">
         <section class="panel panel-list">
           <div class="panel-header">
-            <h2>Kai Instances</h2>
-            <button class="ghost-btn" id="refresh-btn" title="Refresh">↻</button>
+            <h2>${escapeHtml(b.copy.admin.instancesHeading)}</h2>
           </div>
           <div id="instance-table"></div>
         </section>
         <aside class="panel panel-detail" id="detail-panel">
           <div class="panel-header">
             <h2>Details</h2>
-            <button class="ghost-btn" id="close-detail-btn" hidden>×</button>
+            <button class="icon-btn" id="close-detail-btn" hidden aria-label="Close detail">×</button>
           </div>
-          <div id="detail-body" class="detail-empty">Select an instance to view details.</div>
+          <div id="detail-body" class="detail-empty">${detailEmptyHTML()}</div>
         </aside>
       </main>
     </div>
@@ -150,7 +166,12 @@ function renderTable() {
   if (!el) return;
 
   if (state.loading) {
-    el.innerHTML = `<div class="status-msg">Loading…</div>`;
+    el.innerHTML = `
+      <div class="status-msg">
+        <div class="indicator loading-state" aria-hidden="true">${indicatorMarkSVG()}</div>
+        <span class="status-msg-loading-label">Checking signal</span>
+      </div>
+    `;
     return;
   }
   if (state.error) {
@@ -158,7 +179,13 @@ function renderTable() {
     return;
   }
   if (state.instances.length === 0) {
-    el.innerHTML = `<div class="status-msg">No instances. Provision one with <code>swarm-ctl provision</code>.</div>`;
+    el.innerHTML = `
+      <div class="status-msg">
+        <div class="indicator idle" aria-hidden="true">${indicatorMarkSVG()}</div>
+        <h3 class="status-msg-title">No instances yet</h3>
+        <p class="status-msg-body">Provision one with <code>swarm-ctl provision</code>.</p>
+      </div>
+    `;
     return;
   }
 
@@ -264,7 +291,7 @@ function renderDetail() {
 
   if (!state.selected || !state.detail) {
     body.className = 'detail-empty';
-    body.textContent = 'Select an instance to view details.';
+    body.innerHTML = detailEmptyHTML();
     if (closeBtn) closeBtn.hidden = true;
     return;
   }
@@ -274,21 +301,28 @@ function renderDetail() {
   const detail = state.detail as any;
   const conditions = (detail?.status?.conditions || []) as Array<Record<string, string>>;
 
+  const readyDot = inst?.ready
+    ? '<span class="dot ok"></span> yes'
+    : '<span class="dot off"></span> no';
+  const suspendedVal = inst?.suspended
+    ? '<span class="dot off"></span> yes'
+    : '<span class="dot ok"></span> no';
+
   body.className = '';
   body.innerHTML = `
     <div class="detail-section">
-      <h3>${escapeHtml(inst?.customerName || state.selected)}</h3>
+      <div class="detail-customer-name">${escapeHtml(inst?.customerName || state.selected)}</div>
       <div class="kv-grid">
         <div class="kv-key">Name</div><div class="kv-val mono">${escapeHtml(state.selected)}</div>
         <div class="kv-key">Slug</div><div class="kv-val mono">${escapeHtml(inst?.customerSlug || '—')}</div>
         <div class="kv-key">Project</div><div class="kv-val">${escapeHtml(inst?.projectName || '—')}</div>
         <div class="kv-key">Phase</div><div class="kv-val">${escapeHtml(inst?.phase || '—')}</div>
-        <div class="kv-key">Ready</div><div class="kv-val">${inst?.ready ? 'yes' : 'no'}</div>
-        <div class="kv-key">Suspended</div><div class="kv-val">${inst?.suspended ? 'yes' : 'no'}</div>
+        <div class="kv-key">Ready</div><div class="kv-val">${readyDot}</div>
+        <div class="kv-key">Suspended</div><div class="kv-val">${suspendedVal}</div>
         <div class="kv-key">Model</div><div class="kv-val mono">${escapeHtml(inst?.model || 'default')}</div>
         <div class="kv-key">Gateway</div><div class="kv-val mono">${escapeHtml(inst?.gatewayURL || '—')}</div>
         <div class="kv-key">External</div><div class="kv-val mono">${escapeHtml(inst?.externalURL || '—')}</div>
-        <div class="kv-key">Created</div><div class="kv-val">${escapeHtml(inst?.creationTimestamp || '—')}</div>
+        <div class="kv-key">Created</div><div class="kv-val mono">${escapeHtml(inst?.creationTimestamp || '—')}</div>
       </div>
     </div>
     ${conditions.length > 0 ? `
@@ -299,8 +333,8 @@ function renderDetail() {
           <tbody>
             ${conditions.map((c) => `
               <tr>
-                <td>${escapeHtml(c.type || '')}</td>
-                <td>${c.status === 'True' ? '<span class="dot ok"></span>' : '<span class="dot off"></span>'} ${escapeHtml(c.status || '')}</td>
+                <td class="mono">${escapeHtml(c.type || '')}</td>
+                <td>${c.status === 'True' ? '<span class="dot ok"></span>' : '<span class="dot off"></span>'}${escapeHtml(c.status || '')}</td>
                 <td>${escapeHtml(c.reason || '')}</td>
               </tr>
             `).join('')}
@@ -312,6 +346,13 @@ function renderDetail() {
       <h3>Raw</h3>
       <pre class="raw-yaml">${escapeHtml(JSON.stringify(detail, null, 2))}</pre>
     </div>
+  `;
+}
+
+function detailEmptyHTML(): string {
+  return `
+    <div class="indicator idle sm" aria-hidden="true">${indicatorMarkSVG()}</div>
+    <p>Select an instance to view details.</p>
   `;
 }
 
@@ -370,4 +411,18 @@ function escapeHtml(text: string): string {
   const div = document.createElement('div');
   div.textContent = text ?? '';
   return div.innerHTML;
+}
+
+// The Kai brand mark — three nodes in triangle inside a faint circle.
+// Lifted from status-page so empty/loading states feel continuous with
+// the rest of the product. Per brand.md §5.
+function indicatorMarkSVG(): string {
+  return `
+    <svg viewBox="0 0 100 100" class="indicator-mark" aria-hidden="true">
+      <circle class="ring" cx="50" cy="50" r="42" />
+      <circle class="node n1" cx="50" cy="22" r="7" />
+      <circle class="node n2" cx="24" cy="64" r="7" />
+      <circle class="node n3" cx="76" cy="64" r="7" />
+    </svg>
+  `;
 }

@@ -35,6 +35,8 @@ spec:
                 secretKeyRef:
                   name: admin-console-auth
                   key: token
+            - name: BRANDING_DIR
+              value: "/branding"
           resources:
             requests:
               memory: "32Mi"
@@ -60,3 +62,12 @@ spec:
             runAsNonRoot: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: branding
+              mountPath: /branding
+              readOnly: true
+      volumes:
+        - name: branding
+          configMap:
+            name: admin-console-branding
+            optional: true

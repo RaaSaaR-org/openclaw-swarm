@@ -39,7 +39,7 @@ import (
 //
 // Anything else — legacy tenants from before TASK-012/015 with no tier set,
 // or explicitly internal-managed tenants — keeps the original 1Gi/2Gi
-// defaults so swarm-emai/swarm-config workspaces don't get silently
+// defaults so swarm-emai workspaces don't get silently
 // throttled by a feature they never opted into.
 func isSaaSEnrolled(kai *swarmv1alpha1.KaiInstance) bool {
 	if kai == nil {
@@ -62,7 +62,7 @@ const (
 //
 // The two label groups (`emai.io/*` and `swarm.io/*`) coexist intentionally
 // during the TASK-024 rename: existing selectors (NetworkPolicy podSelector,
-// ad-hoc kubectl filters in swarm-emai/swarm-config) still match the legacy
+// ad-hoc kubectl filters in swarm-emai) still match the legacy
 // labels, while new tooling can already select on the generic
 // `swarm.io/tenant=<slug>` label that's not tied to EmAI's domain. The legacy
 // labels are dropped together with the v1alpha1→v1alpha2 CRD bump (TASK-012).
@@ -229,7 +229,7 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts dep
 	//     tier-appropriate defaults for missing fields.
 	//   - Legacy tenants (no tier, or managed: internal): keep the original
 	//     1Gi/2Gi defaults so existing internal workspaces in
-	//     swarm-emai/swarm-config don't suddenly get throttled by the SaaS
+	//     swarm-emai don't suddenly get throttled by the SaaS
 	//     quota envelope. Hand-sized via spec.resources as today.
 	resources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{

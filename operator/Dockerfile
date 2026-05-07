@@ -2,7 +2,7 @@
 # Build context is the swarm repo root so the COPY commands can reach the
 # sibling pkg/ modules that go.mod's replace directives point to (today
 # pkg/quotas; future siblings land here too). Same pattern as
-# web/customer-chat / web/customer-center / web/onboarding Dockerfiles.
+# web/chat / web/workspace / web/onboarding Dockerfiles.
 # CI/release wire this up via -f operator/Dockerfile + context: .
 FROM golang:1.25 AS builder
 ARG TARGETOS

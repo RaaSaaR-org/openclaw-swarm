@@ -75,7 +75,7 @@ spec:
                   (e.g. "Acme GmbH"). Legacy field name; the SaaS-direction
                   alternative is `tenantName` below — when both are set, `tenantName`
                   wins. The two coexist on v1alpha1 so existing internal-tenant
-                  manifests in swarm-emai/swarm-config keep working while new code
+                  manifests in swarm-emai keep working while new code
                   migrates to the tenant-* names. Both retire in v1alpha2 + a
                   conversion webhook (TASK-012 Phase 2.B + TASK-024 Phase 5).
                 maxLength: 100
@@ -215,7 +215,7 @@ spec:
                   tenantName is the SaaS-direction display name for the workspace's
                   owning entity. When set, it takes precedence over `customerName`.
                   Both fields live side-by-side on v1alpha1 so the public swarm repo
-                  can be tenant-clean (TASK-024) while existing swarm-emai/swarm-config
+                  can be tenant-clean (TASK-024) while existing swarm-emai
                   manifests keep working unchanged. The conversion webhook in v1alpha2
                   (TASK-012 Phase 2.B) drops `customerName` entirely.
                 maxLength: 100

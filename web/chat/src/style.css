@@ -1,0 +1,1141 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Canonical brand tokens load from /branding/theme.css (default Kai, override
+   via mounted ConfigMap). The :root below maps legacy app-local var names
+   onto canonical ones so existing rules keep working unchanged. */
+:root {
+  --base: var(--bg);
+  --surface: var(--bg-elev);
+  --surface-elevated: var(--bg-raised);
+  --border: var(--hairline-strong);
+  --border-subtle: var(--hairline);
+
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+
+  --caltrans-orange: var(--accent);
+  --orange-light: var(--accent-hover);
+  --orange-lighter: var(--accent-hover);
+  --orange-dark: var(--accent-deep);
+  --orange-bg: var(--accent-bg);
+  --orange-bg-hover: var(--accent-bg-hover);
+
+  --accent-secondary: var(--aurora);
+  --error: var(--alert);
+  --error-bg: var(--alert-bg);
+
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-medium: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --shadow-orange: 0 0 0 3px var(--accent-bg-hover);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: 28px;
+
+  /* Single motion curve per brand.md §6. */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion: 200ms;
+}
+
+html, body {
+  height: 100dvh;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: 15px;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+#app {
+  height: 100dvh;
+  position: relative;
+  isolation: isolate;
+}
+
+::selection {
+  background: var(--accent-bg-hover);
+  color: var(--text);
+}
+
+a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+button, input, textarea {
+  font-family: inherit;
+  font-feature-settings: inherit;
+}
+
+/* ============================================================
+   BRAND LOCKUP
+   The wordmark stays --text per brand.md §5; only the mark is cyan.
+   ============================================================ */
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  color: var(--text);
+}
+.brand-lockup-mark {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: 0 0 22px;
+}
+.brand-lockup-word {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+/* Legacy hooks — kept so any stray references resolve cleanly. */
+.brand-mark {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.brand {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   EYEBROW LABEL
+   brand.md §7 — small caps 12px weight 500, leading cyan dot.
+   ============================================================ */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 6px;
+}
+
+/* ============================================================
+   LIVE BADGE
+   brand.md §7 — pill, 1px hairline, pulsing cyan dot.
+   ============================================================ */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.status::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: 0 0 6px;
+}
+
+.status.connecting {
+  color: var(--text);
+}
+.status.connecting::before {
+  background: var(--aurora-warm);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--aurora-warm) 60%, transparent);
+  animation: livePulseWarm 1.6s var(--ease) infinite;
+}
+
+.status.online {
+  color: var(--text);
+}
+.status.online::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: livePulse 2.4s var(--ease) infinite;
+}
+
+.status.error {
+  color: var(--alert);
+}
+.status.error::before {
+  background: var(--alert);
+}
+
+@keyframes livePulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
+  60%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+@keyframes livePulseWarm {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--aurora-warm) 60%, transparent); }
+  60%  { box-shadow: 0 0 0 5px color-mix(in srgb, var(--aurora-warm) 0%, transparent); }
+  100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--aurora-warm) 0%, transparent); }
+}
+
+/* ============================================================
+   ICON BUTTON
+   Pill, transparent, hairline border. Hover: border becomes accent.
+   ============================================================ */
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--motion) var(--ease),
+              color var(--motion) var(--ease);
+}
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+  outline: none;
+}
+.icon-btn svg { display: block; }
+
+/* ============================================================
+   CHAT SHELL
+   ============================================================ */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  position: relative;
+}
+
+/* Header — slim chrome, gradient hairline at bottom (brand signature). */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+.chat-header::after {
+  content: '';
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hairline) 18%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 50%,
+    var(--hairline) 82%,
+    transparent 100%
+  );
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.header-divider {
+  color: var(--text-faint);
+  font-weight: 300;
+  font-size: 18px;
+  user-select: none;
+}
+
+.header-context {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.header-context-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header-context-meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Legacy aliases used elsewhere in JS — kept as pass-throughs. */
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+.agent-name {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.header-subtitle {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.header-info { display: none; }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.signed-in-as {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--motion) var(--ease),
+              color var(--motion) var(--ease);
+}
+.info-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ============================================================
+   MESSAGES — transcript layout (agent) + pill card (user)
+   ============================================================ */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  scroll-behavior: smooth;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 12vh 4px 8vh;
+  flex: 1;
+}
+.welcome-mark {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 28px;
+  object-fit: contain;
+}
+.welcome h2 {
+  font-size: clamp(28px, 4.4vw, 44px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--text);
+  margin-bottom: 14px;
+  max-width: 16ch;
+}
+.welcome p {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 44ch;
+  font-weight: 400;
+}
+
+.error-message {
+  padding: 12vh 4px;
+  color: var(--alert);
+  font-size: 15px;
+}
+
+/* Message base */
+.message {
+  display: block;
+  width: 100%;
+  animation: msgIn 220ms var(--ease);
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* AGENT — transcript treatment: thin cyan-fading rule on the left,
+   eyebrow with sender name, body text in --text. NO bubble bg. */
+.message.agent {
+  position: relative;
+  padding: 2px 0 2px 22px;
+}
+.message.agent::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 35%, transparent) 22%,
+    var(--hairline) 60%,
+    transparent 100%
+  );
+}
+.message.agent .message-bubble {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+}
+.message.agent .message-sender {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.message.agent .message-sender::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.message.agent .message-text {
+  color: var(--text);
+  font-size: 15.5px;
+  line-height: 1.6;
+}
+
+/* USER — pill card on the right. */
+.message.user {
+  display: flex;
+  justify-content: flex-end;
+}
+.message.user .message-bubble {
+  max-width: 80%;
+  padding: 10px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  border-top-right-radius: var(--r-sm);
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.message.user .message-text { color: var(--text); }
+
+/* Streaming cursor — appears in-line at end of agent text. */
+.message.streaming .message-text::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Error agent message */
+.message.error .message-bubble {
+  color: var(--alert);
+}
+.message.agent.error::before {
+  background: linear-gradient(to bottom, var(--alert), transparent);
+}
+
+/* Markdown inside agent transcript */
+.message.agent .message-text > *:first-child { margin-top: 0; }
+.message.agent .message-text > *:last-child { margin-bottom: 0; }
+
+.message.agent .message-text h1,
+.message.agent .message-text h2,
+.message.agent .message-text h3 {
+  margin: 18px 0 6px;
+  color: var(--text);
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+.message.agent .message-text h1 { font-size: 19px; font-weight: 600; }
+.message.agent .message-text h2 { font-size: 17px; font-weight: 600; }
+.message.agent .message-text h3 { font-size: 15px; font-weight: 500; }
+
+.message.agent .message-text p {
+  margin: 6px 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+.message.agent .message-text ul,
+.message.agent .message-text ol {
+  margin: 6px 0 6px 22px;
+  color: var(--text);
+}
+.message.agent .message-text li { margin: 3px 0; }
+.message.agent .message-text strong { color: var(--text); font-weight: 600; }
+.message.agent .message-text em { color: var(--text); font-style: normal; font-weight: 600; }
+
+.message.agent .message-text a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--motion) var(--ease);
+}
+.message.agent .message-text a:hover {
+  text-decoration-color: var(--accent);
+}
+
+.message.agent .message-text code {
+  background: var(--accent-bg);
+  color: var(--accent);
+  padding: 1px 7px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-feature-settings: 'liga' 0;
+}
+
+.message.agent .message-text pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin: 10px 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+}
+.message.agent .message-text pre code {
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.message.agent .message-text blockquote {
+  border-left: 1px solid var(--accent);
+  padding-left: 14px;
+  margin: 10px 0;
+  color: var(--text-muted);
+}
+
+/* Code block + copy button */
+.code-block {
+  position: relative;
+}
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease),
+              border-color var(--motion) var(--ease),
+              color var(--motion) var(--ease);
+}
+.code-block:hover .copy-btn { opacity: 1; }
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ============================================================
+   COMPOSER — pill input, gradient hairline above, cyan send.
+   ============================================================ */
+.input-area {
+  flex-shrink: 0;
+  padding: 14px 28px 18px;
+  background: var(--bg);
+  position: relative;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.input-area::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 28px;
+  right: 28px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hairline) 18%,
+    color-mix(in srgb, var(--accent) 35%, transparent) 50%,
+    var(--hairline) 82%,
+    transparent 100%
+  );
+}
+
+#chat-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 5px 6px 5px 22px;
+  transition: border-color var(--motion) var(--ease),
+              background var(--motion) var(--ease);
+}
+#chat-form:focus-within {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+}
+
+#input {
+  flex: 1;
+  padding: 11px 0;
+  border: none;
+  font-size: 15px;
+  font-family: inherit;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  letter-spacing: -0.005em;
+}
+#input::placeholder { color: var(--text-faint); }
+#input:disabled { opacity: 0.4; }
+
+#send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--motion) var(--ease),
+              transform var(--motion) var(--ease);
+}
+#send-btn svg { display: block; }
+#send-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+#send-btn:active:not(:disabled) { transform: translateY(0); }
+#send-btn:disabled {
+  background: var(--bg-raised);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   PAGE FOOTER — tiny mono credit
+   ============================================================ */
+.page-footer {
+  flex-shrink: 0;
+  padding: 0 28px 14px;
+  text-align: center;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.page-footer a {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  transition: color var(--motion) var(--ease);
+}
+.page-footer a:hover { color: var(--text-muted); }
+.page-footer .heart { color: var(--accent); }
+
+/* ============================================================
+   TYPING INDICATOR — three cyan dots, fade only (no bounce)
+   ============================================================ */
+#typing-indicator.message.agent .message-bubble {
+  display: inline-flex;
+}
+.typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 3px 0;
+  align-items: center;
+}
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: typingFade 1.4s var(--ease) infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typingFade {
+  0%, 80%, 100% { opacity: 0.25; }
+  40%           { opacity: 1; }
+}
+
+/* Hide the eyebrow on the typing-indicator (mark is implied). */
+#typing-indicator .message-sender { display: none; }
+#typing-indicator { padding-top: 0; }
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+.messages::-webkit-scrollbar { width: 4px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb {
+  background: var(--hairline);
+  border-radius: 2px;
+}
+.messages::-webkit-scrollbar-thumb:hover {
+  background: var(--hairline-strong);
+}
+
+/* ============================================================
+   LOGIN SHELL — hero gradient mesh, brand lockup, display title
+   ============================================================ */
+.login-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Hero atmospheric mesh — brand.md §6.
+   Single off-centre orb; cyan → violet → warm-magenta sequence.
+   Heavy blur, opacity ≤ 0.18. */
+.login-shell::before {
+  content: '';
+  position: absolute;
+  top: -22vh;
+  right: -18vw;
+  width: 80vw;
+  height: 80vw;
+  max-width: 1100px;
+  max-height: 1100px;
+  background: linear-gradient(
+    135deg,
+    var(--accent) 0%,
+    var(--aurora) 50%,
+    var(--aurora-warm) 100%
+  );
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+}
+/* A second, smaller orb low-left for compositional balance. Subtle. */
+.login-shell::after {
+  content: '';
+  position: absolute;
+  bottom: -28vh;
+  left: -20vw;
+  width: 60vw;
+  height: 60vw;
+  max-width: 800px;
+  max-height: 800px;
+  background: radial-gradient(
+    circle,
+    var(--accent) 0%,
+    var(--aurora) 60%,
+    transparent 100%
+  );
+  filter: blur(100px);
+  opacity: 0.10;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-header {
+  padding: 28px 32px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  background: color-mix(in srgb, var(--bg-elev) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 40px 38px;
+  position: relative;
+}
+
+/* Hover-style gradient hairline at the top edge of the card — adds depth. */
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-lg);
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 40%, transparent) 0%,
+    transparent 30%,
+    transparent 70%,
+    color-mix(in srgb, var(--aurora) 30%, transparent) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+.login-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 22px;
+}
+.login-eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 6px;
+}
+
+.login-title {
+  font-size: clamp(28px, 3.5vw, 38px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--text);
+  margin-bottom: 14px;
+  max-width: 14ch;
+}
+
+.login-subtitle {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+.login-error {
+  background: var(--alert-bg);
+  border: 1px solid color-mix(in srgb, var(--alert) 35%, transparent);
+  color: var(--alert);
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+#login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.login-field input {
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color var(--motion) var(--ease),
+              background var(--motion) var(--ease);
+}
+.login-field input::placeholder { color: var(--text-faint); }
+.login-field input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.login-submit {
+  margin-top: 6px;
+  width: 100%;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 14px 22px;
+  cursor: pointer;
+  transition: background var(--motion) var(--ease),
+              transform var(--motion) var(--ease);
+}
+.login-submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.login-submit:active:not(:disabled) { transform: translateY(0); }
+.login-submit:disabled { opacity: 0.6; cursor: wait; }
+
+.login-help {
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  line-height: 1.55;
+}
+
+.login-footer {
+  padding: 22px 32px 28px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  position: relative;
+  z-index: 1;
+}
+.login-footer a {
+  color: var(--text-faint);
+  transition: color var(--motion) var(--ease);
+}
+.login-footer a:hover { color: var(--text-muted); }
+
+/* ============================================================
+   PAGE-ERROR — for missing slug etc.
+   ============================================================ */
+.page-error {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+.page-error::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80vw;
+  height: 80vw;
+  max-width: 900px;
+  max-height: 900px;
+  background: linear-gradient(
+    135deg,
+    var(--accent) 0%,
+    var(--aurora) 50%,
+    var(--aurora-warm) 100%
+  );
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.10;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-error .error-card {
+  max-width: 480px;
+  background: color-mix(in srgb, var(--bg-elev) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 36px 36px 32px;
+  text-align: left;
+  position: relative;
+  z-index: 1;
+}
+.page-error h2 {
+  font-size: clamp(22px, 2.6vw, 28px);
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+.page-error p {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+.page-error code {
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .message { animation: none; }
+  .message.streaming .message-text::after { animation: none; opacity: 0.6; }
+  .typing-dots span { animation: none; opacity: 0.55; }
+  .status::before { animation: none !important; }
+  .login-submit, #send-btn, .icon-btn, .info-btn { transition: none; }
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+@media (max-width: 720px) {
+  .chat-header { padding: 14px 18px; }
+  .chat-header::after { left: 18px; right: 18px; }
+
+  .header-divider, .header-context-meta { display: none; }
+  .signed-in-as { display: none; }
+
+  .messages { padding: 24px 18px 20px; gap: 22px; }
+  .input-area { padding: 12px 18px 16px; }
+  .input-area::before { left: 18px; right: 18px; }
+  .page-footer { padding: 0 18px 12px; }
+
+  .welcome { padding: 8vh 0 6vh; }
+  .welcome h2 { font-size: clamp(26px, 7vw, 34px); }
+
+  .message.user .message-bubble { max-width: 88%; }
+
+  .login-card { padding: 32px 26px; }
+  .login-header { padding: 22px 22px; }
+  .login-footer { padding: 18px 22px 24px; }
+}

@@ -1,184 +1,579 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Canonical brand tokens load from /branding/theme.css. The :root below maps
+   legacy app-local var names onto canonical ones. */
 :root {
-  --caltrans-orange: #FF6700;
-  --orange-light: #FF8534;
+  --caltrans-orange: var(--accent);
+  --orange-light: var(--accent-hover);
 
-  --base: #141414;
-  --surface: #1F1F1F;
-  --surface-elevated: #292929;
-  --border: #3D3D3D;
-  --border-subtle: #2A2A2A;
+  --base: var(--bg);
+  --surface: var(--bg-elev);
+  --surface-elevated: var(--bg-raised);
+  --border: var(--hairline-strong);
+  --border-subtle: var(--hairline);
 
-  --text-primary: #F5F5F4;
-  --text-secondary: #A8A29E;
-  --text-muted: #78716C;
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
 
-  --success: #4ADE80;
-  --warning: #FBBF24;
-  --error: #F87171;
-  --info: #60A5FA;
+  --warning: var(--aurora-warm);
+  --error: var(--alert);
+  --info: var(--aurora);
 
-  --radius-md: 8px;
-  --radius-lg: 16px;
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
   --radius-xl: 24px;
+
+  /* Single motion curve per brand.md §6. */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion: 200ms;
 }
+
+html, body { min-height: 100dvh; }
 
 body {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--base);
-  color: var(--text-primary);
-  min-height: 100dvh;
+  font-family: var(--font-family);
+  font-size: 15px;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
+
+#app { min-height: 100dvh; position: relative; isolation: isolate; }
+
+::selection { background: var(--accent-bg-hover); color: var(--text); }
+
+a { color: inherit; text-decoration: none; }
 
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: 'liga' 0;
   font-size: 12.5px;
-  background: var(--surface-elevated);
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--text-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
+  padding: 1px 7px;
+  border-radius: var(--r-sm);
+  color: var(--accent);
 }
 
+/* ============================================================
+   STATUS SHELL — hero gradient mesh canvas
+   The status page has very little chrome, so the atmosphere
+   carries the page. Single off-centre orb (cyan→violet→warm),
+   plus a smaller balance orb low-left. brand.md §6.
+   ============================================================ */
 .status-shell {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 103, 0, 0.05), transparent 50%),
-    var(--base);
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
 }
 
+.status-shell::before {
+  content: '';
+  position: absolute;
+  top: -22vh;
+  right: -18vw;
+  width: 80vw;
+  height: 80vw;
+  max-width: 1100px;
+  max-height: 1100px;
+  background: linear-gradient(
+    135deg,
+    var(--accent) 0%,
+    var(--aurora) 50%,
+    var(--aurora-warm) 100%
+  );
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+}
+.status-shell::after {
+  content: '';
+  position: absolute;
+  bottom: -28vh;
+  left: -20vw;
+  width: 60vw;
+  height: 60vw;
+  max-width: 800px;
+  max-height: 800px;
+  background: radial-gradient(
+    circle,
+    var(--accent) 0%,
+    var(--aurora) 60%,
+    transparent 100%
+  );
+  filter: blur(100px);
+  opacity: 0.10;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================
+   HEADER — brand lockup left, "Status" eyebrow right
+   ============================================================ */
 .status-header {
-  padding: 20px 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 32px;
+  position: relative;
+  z-index: 2;
 }
-.brand-mark { color: var(--caltrans-orange); font-weight: 700; }
-.brand-divider { color: var(--text-muted); }
 
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  color: var(--text);
+}
+.brand-lockup-mark {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: 0 0 22px;
+}
+.brand-lockup-word {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+/* Legacy .brand-mark / .brand-divider / .brand-tagline kept as utility hooks
+   in case other code references them; the new lockup pattern overrides. */
+.brand-mark {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.brand-divider {
+  color: var(--text-faint);
+  font-weight: 300;
+  user-select: none;
+}
+.brand-tagline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.brand-tagline::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 6px;
+}
+
+/* ============================================================
+   MAIN — centered glass card
+   ============================================================ */
 .status-main {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 32px 24px;
+  position: relative;
+  z-index: 1;
 }
 
-.loading {
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-/* ---------- Status card ---------- */
+/* ============================================================
+   STATUS CARD — glass surface with gradient hairline border
+   ============================================================ */
 .status-card {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  padding: 48px 40px 36px;
   width: 100%;
-  max-width: 480px;
+  max-width: 460px;
+  background: color-mix(in srgb, var(--bg-elev) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 44px 40px 36px;
+  position: relative;
   text-align: center;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+  animation: cardIn 320ms var(--ease);
 }
-
-.status-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  margin-bottom: 24px;
-  position: relative;
-}
-.indicator-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  position: relative;
-}
-.indicator-dot::after {
+.status-card::before {
   content: '';
   position: absolute;
-  inset: -10px;
+  inset: 0;
+  border-radius: var(--r-lg);
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 40%, transparent) 0%,
+    transparent 30%,
+    transparent 70%,
+    color-mix(in srgb, var(--aurora) 30%, transparent) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+
+.status-card.error::before {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--alert) 40%, transparent) 0%,
+    transparent 50%
+  );
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   STATUS INDICATOR — the brand mark, blown up to display scale
+   Three nodes in triangle. The three nodes ARE the brand mark
+   (per brand.md §5: "the mark represents three agents inside
+   a workspace"). At display size, they become the live signal.
+   ============================================================ */
+.status-indicator {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 28px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Concentric halo rings — only visible when "online" */
+.status-indicator::before,
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  background: inherit;
-  opacity: 0.2;
-  z-index: -1;
+  border: 1px solid var(--hairline);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease);
 }
 
-.status-online .indicator-dot { background: var(--success); }
-.status-online { background: rgba(74, 222, 128, 0.08); }
-.status-online .indicator-dot::after { animation: pulse 2.4s ease-out infinite; background: var(--success); }
-
-.status-setting-up .indicator-dot { background: var(--warning); }
-.status-setting-up { background: rgba(251, 191, 36, 0.08); }
-.status-setting-up .indicator-dot::after { animation: pulse 1.6s ease-out infinite; background: var(--warning); }
-
-.status-maintenance .indicator-dot { background: var(--info); }
-.status-maintenance { background: rgba(96, 165, 250, 0.08); }
-
-.status-issue .indicator-dot { background: var(--error); }
-.status-issue { background: rgba(248, 113, 113, 0.08); }
-
-.status-unknown .indicator-dot { background: var(--text-muted); }
-.status-unknown { background: rgba(120, 113, 108, 0.08); }
-
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.4; }
-  100% { transform: scale(2.5); opacity: 0; }
+.indicator-mark {
+  width: 80px;
+  height: 80px;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.indicator-mark .node {
+  fill: var(--text-faint);
+  transition: fill var(--motion) var(--ease);
+}
+.indicator-mark .ring {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 0.8;
 }
 
+/* Hide legacy .indicator-dot (the old single-dot indicator).
+   Kept as a class for compat in case styles target it. */
+.indicator-dot { display: none; }
+
+/* --- ONLINE — three cyan nodes, slow staggered pulse,
+     concentric halo emanating outward ------------------- */
+.status-online .indicator-mark .node { fill: var(--accent); }
+.status-online .indicator-mark .ring {
+  stroke: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.status-online .indicator-mark .node.n1 { animation: nodeBreathe 2.4s var(--ease) infinite; }
+.status-online .indicator-mark .node.n2 { animation: nodeBreathe 2.4s var(--ease) infinite; animation-delay: 0.2s; }
+.status-online .indicator-mark .node.n3 { animation: nodeBreathe 2.4s var(--ease) infinite; animation-delay: 0.4s; }
+.status-online::before {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  opacity: 1;
+  animation: haloPulse 3.2s var(--ease) infinite;
+}
+.status-online::after {
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  opacity: 1;
+  animation: haloPulse 3.2s var(--ease) infinite;
+  animation-delay: 1.6s;
+}
+
+@keyframes nodeBreathe {
+  0%, 100% { opacity: 0.7; }
+  40%      { opacity: 1; }
+}
+@keyframes haloPulse {
+  0%   { transform: scale(0.85); opacity: 0.6; }
+  60%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* --- SETTING UP — aurora-warm pulse, faster, no halo ----- */
+.status-setting-up .indicator-mark .node { fill: var(--aurora-warm); }
+.status-setting-up .indicator-mark .ring {
+  stroke: color-mix(in srgb, var(--aurora-warm) 35%, transparent);
+}
+.status-setting-up .indicator-mark .node.n1 { animation: nodeBreathe 1.6s var(--ease) infinite; }
+.status-setting-up .indicator-mark .node.n2 { animation: nodeBreathe 1.6s var(--ease) infinite; animation-delay: 0.13s; }
+.status-setting-up .indicator-mark .node.n3 { animation: nodeBreathe 1.6s var(--ease) infinite; animation-delay: 0.26s; }
+.status-setting-up::before {
+  border-color: color-mix(in srgb, var(--aurora-warm) 30%, transparent);
+  opacity: 1;
+  animation: haloPulseWarm 2.4s var(--ease) infinite;
+}
+@keyframes haloPulseWarm {
+  0%   { transform: scale(0.9); opacity: 0.5; }
+  60%  { transform: scale(1.2); opacity: 0; }
+  100% { transform: scale(1.2); opacity: 0; }
+}
+
+/* --- MAINTENANCE / PAUSED — faint static nodes, no pulse - */
+.status-maintenance .indicator-mark .node { fill: var(--text-faint); opacity: 0.7; }
+.status-maintenance .indicator-mark .ring { stroke: var(--hairline); }
+
+/* --- ISSUE — center node alert-red, two faint, no pulse - */
+.status-issue .indicator-mark .node { fill: var(--text-faint); opacity: 0.45; }
+.status-issue .indicator-mark .node.n1 {
+  fill: var(--alert);
+  opacity: 1;
+  animation: alertBlink 1.4s var(--ease) infinite;
+}
+.status-issue .indicator-mark .ring {
+  stroke: color-mix(in srgb, var(--alert) 35%, transparent);
+}
+.status-issue::before {
+  border-color: color-mix(in srgb, var(--alert) 25%, transparent);
+  opacity: 1;
+}
+@keyframes alertBlink {
+  0%, 80%, 100% { opacity: 1; }
+  40%           { opacity: 0.55; }
+}
+
+/* --- UNKNOWN — all faint --------------------------------- */
+.status-unknown .indicator-mark .node { fill: var(--text-faint); opacity: 0.4; }
+.status-unknown .indicator-mark .ring { stroke: var(--hairline); }
+
+/* ============================================================
+   STATUS HEADLINE & MESSAGE
+   ============================================================ */
 .status-headline {
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin-bottom: 12px;
+  font-size: clamp(28px, 3.4vw, 36px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--text);
+  margin-bottom: 14px;
 }
 .status-message {
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.5;
-  margin-bottom: 32px;
+  color: var(--text-muted);
+  font-size: 15.5px;
+  line-height: 1.55;
+  margin: 0 auto 28px;
+  max-width: 36ch;
 }
 
+/* ============================================================
+   STATUS META — mono values
+   ============================================================ */
 .status-meta {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 24px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 22px;
   text-align: left;
 }
 .meta-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  font-size: 13.5px;
+  gap: 16px;
+  font-size: 13px;
 }
-.meta-key { color: var(--text-muted); }
-.meta-val { color: var(--text-primary); font-weight: 500; }
+.meta-key {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.meta-val {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-feature-settings: 'liga' 0;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
-/* ---------- Footer ---------- */
+/* ============================================================
+   LOADING STATE — a small preview of the brand-mark indicator
+   with all three nodes pulsing in stagger. The page is "looking".
+   ============================================================ */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 24px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.loading-mark {
+  width: 56px;
+  height: 56px;
+  display: block;
+}
+.loading-mark .ring { fill: none; stroke: var(--hairline); stroke-width: 0.8; }
+.loading-mark .node { fill: var(--accent); }
+.loading-mark .node.n1 { animation: nodeBreathe 1.6s var(--ease) infinite; }
+.loading-mark .node.n2 { animation: nodeBreathe 1.6s var(--ease) infinite; animation-delay: 0.18s; }
+.loading-mark .node.n3 { animation: nodeBreathe 1.6s var(--ease) infinite; animation-delay: 0.36s; }
+
+/* ============================================================
+   FOOTER — last-checked + mono domain, gradient hairline above
+   ============================================================ */
 .status-footer {
-  padding: 18px 24px 24px;
+  position: relative;
+  padding: 22px 32px 28px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 14px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-faint);
+  z-index: 1;
 }
-.status-footer a { color: var(--text-secondary); text-decoration: none; }
-.status-footer a:hover { color: var(--text-primary); }
-.dot-sep { color: var(--text-muted); }
+.status-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 32px;
+  right: 32px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hairline) 18%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 50%,
+    var(--hairline) 82%,
+    transparent 100%
+  );
+}
+.status-footer #last-checked-line {
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+.status-footer a {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  transition: color var(--motion) var(--ease);
+}
+.status-footer a:hover { color: var(--text-muted); }
+.dot-sep {
+  color: var(--text-faint);
+  user-select: none;
+}
+
+/* When footer renders only a domain (error states, no timer yet),
+   centre it within the row. */
+.status-footer:has(> a:only-child) {
+  justify-content: center;
+}
+
+/* ============================================================
+   ERROR ICON — alert SVG in a tinted square medallion
+   (matches the workspace error pattern)
+   ============================================================ */
+.error-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--alert-bg);
+  color: var(--alert);
+  border: 1px solid color-mix(in srgb, var(--alert) 30%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+}
+.error-icon svg { width: 22px; height: 22px; display: block; }
+
+/* Error card uses left-aligned text — friendlier for explanatory copy. */
+.status-card.error {
+  text-align: left;
+  padding: 36px 36px 32px;
+}
+.status-card.error .error-icon { margin-left: 0; margin-right: 0; }
+.status-card.error .status-headline {
+  font-size: clamp(22px, 2.6vw, 28px);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: 12px;
+}
+.status-card.error .status-message {
+  margin: 0 0 8px 0;
+  max-width: none;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .status-card { animation: none; }
+  .status-online .indicator-mark .node,
+  .status-setting-up .indicator-mark .node,
+  .status-issue .indicator-mark .node.n1 { animation: none !important; }
+  .status-online::before,
+  .status-online::after,
+  .status-setting-up::before { animation: none !important; opacity: 0.5; }
+  .loading::before { animation: none; opacity: 0.6; }
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+@media (max-width: 600px) {
+  .status-header { padding: 18px 20px; }
+  .status-main { padding: 20px 16px; }
+  .status-card { padding: 36px 26px 28px; }
+  .status-card.error { padding: 28px 24px; }
+  .status-indicator { width: 80px; height: 80px; margin-bottom: 22px; }
+  .indicator-mark { width: 64px; height: 64px; }
+  .status-footer { padding: 18px 20px 22px; flex-direction: column; gap: 8px; }
+  .status-footer::before { left: 20px; right: 20px; }
+  .status-footer:has(> a:only-child) { justify-content: center; }
+  .meta-val { font-size: 11.5px; }
+}

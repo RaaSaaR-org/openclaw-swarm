@@ -39,7 +39,7 @@ func chatBridgeSecretName(slug string) string {
 }
 
 // buildUsersSecret creates the empty users-list Secret for a customer.
-// Shape: { "users.json": "[]" } — populated by customer-center's admin UI.
+// Shape: { "users.json": "[]" } — populated by workspace's admin UI.
 func buildUsersSecret(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

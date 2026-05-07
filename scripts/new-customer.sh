@@ -16,7 +16,8 @@ set -euo pipefail
 # Options:
 #   --hq-id ID          HQ entity ID (default: CUST-XXX)
 #   --env ENV           Environment for KaiInstance YAML (default: cloud)
-#   --output DIR        Output base dir for customer files (default: ../swarm-config/customers)
+#   --output DIR        Output base dir for customer files (default: ./out/customers)
+#                       Point this at your private overlay repo's customers/ dir.
 #   --var KEY=VALUE     Set a template variable (repeatable)
 #   --telegram          Enable Telegram channel
 #   --dry-run           Preview generated files without writing
@@ -24,8 +25,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/../templates"
-DEFAULT_OUTPUT="$SCRIPT_DIR/../../swarm-config/customers"
-DEFAULT_KAI_OUTPUT="$SCRIPT_DIR/../../swarm-config/environments"
+DEFAULT_OUTPUT="$PWD/out/customers"
+DEFAULT_KAI_OUTPUT="$PWD/out/environments"
 
 # Colors
 RED='\033[0;31m'
@@ -319,8 +320,8 @@ echo -e "${GREEN}Created customer \"$CUSTOMER_NAME\" from template \"$TEMPLATE\"
 echo ""
 
 # Show relative paths if possible
-REL_OUTPUT="${OUTPUT#$SCRIPT_DIR/../../swarm-config/}"
-REL_KAI="${KAI_OUTPUT#$SCRIPT_DIR/../../swarm-config/}"
+REL_OUTPUT="${OUTPUT#$PWD/}"
+REL_KAI="${KAI_OUTPUT#$PWD/}"
 
 echo "  $REL_OUTPUT/"
 for fname in config.yml SOUL.md USER.md TOOLS.md HEARTBEAT.md .env .env.example; do

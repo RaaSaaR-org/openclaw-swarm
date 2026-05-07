@@ -20,7 +20,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Cookie + TTL chosen so customer-chat and customer-center can share an origin
+// Cookie + TTL chosen so chat and workspace can share an origin
 // and a single login. Slug is part of the JWT claim and validated per-request.
 const (
 	SessionCookieName = "kai-session"
@@ -30,12 +30,16 @@ const (
 // SessionClaims is the minimal JWT payload we issue. Sub is the user email,
 // Slug is the customer slug the session belongs to, Iat/Exp are unix seconds,
 // Jti is a per-issue random identifier used for server-side revocation.
+// Uid is the platform-wide user ID (pkg/users.User.ID) for SaaS-managed
+// workspaces; empty for legacy internal-managed tenants where the per-tenant
+// Secret is the source of truth and there is no central User row.
 type SessionClaims struct {
 	Sub  string `json:"sub"`
 	Slug string `json:"slug"`
 	Exp  int64  `json:"exp"`
 	Iat  int64  `json:"iat"`
 	Jti  string `json:"jti,omitempty"`
+	Uid  string `json:"uid,omitempty"`
 }
 
 // Argon2id parameters tuned for ~64 MiB working set per call. Bumping these
@@ -135,7 +139,17 @@ func ParseJWT(token string, secret []byte) (*SessionClaims, error) {
 // IssueSession builds claims, signs the JWT, and returns the cookie struct.
 // Caller does http.SetCookie(w, …). `now` is parameterized so tests can pin time.
 // A random `jti` is added so the session can be revoked server-side via Revoker.
+//
+// Uid is omitted — use IssueSessionWithUID for SaaS-managed workspaces where
+// the platform User ID needs to ride along with the session.
 func IssueSession(slug, email string, secret []byte, now time.Time) (*http.Cookie, error) {
+	return IssueSessionWithUID(slug, email, "", secret, now)
+}
+
+// IssueSessionWithUID is the SaaS variant: same shape as IssueSession but the
+// returned cookie carries the platform User ID in claims.Uid. Internal-managed
+// tenants pass uid="" and effectively call IssueSession.
+func IssueSessionWithUID(slug, email, uid string, secret []byte, now time.Time) (*http.Cookie, error) {
 	jti, err := newJTI()
 	if err != nil {
 		return nil, err
@@ -146,6 +160,7 @@ func IssueSession(slug, email string, secret []byte, now time.Time) (*http.Cooki
 		Iat:  now.UTC().Unix(),
 		Exp:  now.UTC().Add(SessionTTL).Unix(),
 		Jti:  jti,
+		Uid:  uid,
 	}
 	tok, err := SignJWT(claims, secret)
 	if err != nil {

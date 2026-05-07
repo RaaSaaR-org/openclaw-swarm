@@ -36,8 +36,8 @@ swarm/
 ├── operator/                # K8s Operator (Go/Kubebuilder) — manages KaiInstance CRDs
 ├── pkg/                     # Shared Go libs across web/* servers (e.g. pkg/auth)
 ├── web/
-│   ├── customer-chat/       # Tenant chat UI (Vite + TypeScript + Go server)
-│   ├── customer-center/     # Tenant dashboard + user management
+│   ├── chat/       # Tenant chat UI (Vite + TypeScript + Go server)
+│   ├── workspace/     # Tenant dashboard + user management
 │   ├── admin-console/       # Platform-operator console (lists/manages KaiInstances)
 │   ├── onboarding/          # Provisioning API (creates KaiInstances; ADMIN_TOKEN-gated today)
 │   └── status-page/         # Per-tenant public status endpoint
@@ -70,7 +70,7 @@ Each `web/<app>/` is a Vite SPA + a Go server that embeds the built SPA via
 `go:embed`. Every app builds the same way:
 
 ```bash
-cd web/<app>          # one of: customer-chat, customer-center, admin-console, onboarding, status-page
+cd web/<app>          # one of: chat, workspace, admin-console, onboarding, status-page
 npm install
 npm run dev           # Vite dev server with hot-reload (localhost:3000)
 npm run build         # Production build → web/dist
@@ -79,12 +79,24 @@ go vet ./...
 go build .            # Builds the Go binary that serves the embedded SPA on :8080
 ```
 
-`customer-chat` and `customer-center` share `pkg/auth/` (JWT + argon2id
-helpers). Their Dockerfiles build from the swarm repo root so they can `COPY
-pkg/`. The other 3 web apps build from their own per-app context. Don't
-introduce a new shared lib without reading
-[`pkg/auth/`](pkg/auth/) first — the relative-`replace` pattern is documented
-there.
+`chat` and `workspace` share `pkg/auth/` (JWT + argon2id
+helpers); all 5 apps share `web/shared/branding/` (theme contract — see
+[`web/README.md`](web/README.md)). All 5 Dockerfiles build from the swarm
+repo root so they can `COPY pkg/` and `COPY web/shared/`. Don't introduce
+a new shared lib without reading [`pkg/auth/`](pkg/auth/) first — the
+relative-`replace` pattern is documented there.
+
+**Branding rules for app CSS:**
+- Use canonical tokens (`var(--accent)`, `var(--bg)`, `var(--text)`, …) or
+  the legacy aliases mapped in each app's `style.css` `:root` block. Don't
+  introduce new hex literals or `rgba(255, 103, 0, …)` orange tints — those
+  bake the brand into the bundle and break the override path.
+- Don't inline `<title>EmAI…</title>` or `<title>Kai…</title>` in
+  `index.html`. Ship `<title>Loading…</title>` and let `applyBranding()`
+  set the real one from `branding.json`.
+- Don't import a font directly in app CSS (`@import url(…Space+Grotesk…)`).
+  The `web/shared/branding/theme.css` owns the `@font-face` line; apps
+  just read `var(--font-family)` and `var(--font-mono)`.
 
 ### Agent Templates
 

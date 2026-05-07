@@ -95,7 +95,7 @@ type templateOpts struct {
 //      file exists. This is the SaaS path (TASK-018 Phase 1).
 //   2. Embedded `templates/SOUL.md.tmpl` — the legacy customer-template,
 //      used for tenants without `spec.appRef` (internal EmAI workspaces
-//      and any pre-SaaS-direction tenant in `swarm-emai`/`swarm-config`).
+//      and any pre-SaaS-direction tenant in `swarm-emai`).
 //
 // Other template files (AGENTS, TOOLS, HEARTBEAT, openclaw.json,
 // SKILL-mc) always come from the embedded set today — they're operator

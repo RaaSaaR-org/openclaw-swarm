@@ -27,7 +27,7 @@ dev-cluster: ## Create k3d cluster (if not exists)
 
 .PHONY: dev-chat
 dev-chat: ## Run customer chat UI with hot-reload
-	cd web/customer-chat && npm install && npm run dev
+	cd web/chat && npm install && npm run dev
 
 .PHONY: dev-operator
 dev-operator: ## Run operator locally against current kubeconfig
@@ -71,7 +71,7 @@ build-operator-arm64: ## Build operator image for ARM64 (cloud deployment)
 
 .PHONY: build-chat
 build-chat: ## Build customer chat image
-	cd web/customer-chat && docker build -t emai-customer-chat:latest .
+	cd web/chat && docker build -t emai-chat:latest .
 
 .PHONY: build-installer
 build-installer: ## Generate operator install manifest (dist/install.yaml)
@@ -91,7 +91,7 @@ uninstall-crds: ## Remove KaiInstance CRD from current cluster
 apply-base: ## Apply base K8s manifests (namespace, central agent, chat UI)
 	kubectl apply -f kubernetes/namespace.yml
 	kubectl apply -f kubernetes/central/
-	kubectl apply -f kubernetes/customer-chat/
+	kubectl apply -f kubernetes/chat/
 
 ##@ Smoke Test
 
