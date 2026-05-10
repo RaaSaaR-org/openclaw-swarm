@@ -17,7 +17,7 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-10
 ---
 
 
@@ -82,17 +82,33 @@ This is the hygiene work that has to land before TASK-023 (three-repo split) can
 
 **Phase 2 (CRD additive `tenantName` + `tenantSlug`) — done** on 2026-05-04. Two new optional fields on v1alpha1 `KaiInstanceSpec`: `tenantName` (max 100 chars) and `tenantSlug` (DNS-safe, max 63 chars). When set, they take precedence over the legacy `customerName`/`customerSlug` — existing manifests in swarm-emai/swarm-config keep working unchanged because the tenant fields are additive overrides, not replacements. Two helper methods on the Spec (`EffectiveName()`, `EffectiveSlug()`) route through the tenant fields first; the operator's reconciler uses them everywhere it previously read `kai.Spec.CustomerName`/`CustomerSlug`. The legacy `customerName` field stays required at the OpenAPI level (existing manifests still validate); v1alpha2 + the conversion webhook drops `customerName` entirely. Four-case precedence test (legacy only / tenant overrides legacy / tenant only / mixed) covers the helper logic. Generated CRD (`config/crd/bases/swarm.emai.io_kaiinstances.yaml`) regenerated.
 
+**Phase 4 (web app dir rename) — done** between 2026-05-04 and 2026-05-06 via the sibling [[TASK-025]] (rename `customer-center` → `workspace`) and [[TASK-026]] (agent-editor SPA spike). The rename target evolved from the original "center" proposal here to **`workspace`** — TASK-025's status note explains the call. End state in `swarm/web/`:
+```
+admin-console  chat  onboarding  shared  status-page  workspace
+```
+Image names + Dockerfiles + CI matrix in `release.yml` all carry the new names; `git grep customer-chat\|customer-center` returns zero hits in non-test source. TASK-024 keeps the credit because this is the same physical change the original Phase 4 description called for; only the destination name differs.
+
+**Phase 5 (drop `customerName`/`customerSlug` in v1alpha2 + conversion webhook) — done** on 2026-05-10. Picked **Option A** of the architectural fork: kept the CRD's API group at `swarm.emai.io` (renaming to `swarm.io` would have required a one-time CR migration in `swarm-emai` and was deferred). All in-repo public-swarm code is now tenant-clean at the spec level — `kai.Spec.TenantName` / `kai.Spec.TenantSlug` are the only fields the operator and the 5 web apps read or write. v1alpha1 manifests already in `swarm-emai` keep applying via the conversion webhook; the field rename is invisible to existing overlays. See [[TASK-012]] Phase 2.B status for the per-file shipping notes (CRD types, conversion functions, webhook scaffolding, cert-manager wiring, sample manifests, all 5 web apps).
+
+Annotation rename in the same drop: the workspace dashboard's per-tenant extra-links annotation moved from `swarm.emai.io/customer-links` → `swarm.emai.io/tenant-links`. The reader in `web/workspace/server/main.go` falls back to the legacy key for one release so existing overlays keep their links during migration.
+
+**Phase 5.A (admin-console catch-up) — done** on 2026-05-10. Phase 5's "5 web apps" sweep missed the admin-console: `summarize()` was reading the dropped `spec.customerName`/`spec.customerSlug` paths against v1alpha2 objects and rendering empty strings for every tenant. Fixed in `web/admin-console/`:
+- `server/main.go`: `instanceSummary.CustomerName/CustomerSlug` → `TenantName/TenantSlug` (JSON tags too); `summarize()` reads `spec.tenantName` / `spec.tenantSlug` first, falls back to legacy `customerName`/`customerSlug` paths so a cluster mid-migration with v1alpha1 stragglers still renders. `firstNonEmpty` widened to variadic to support the 4-way fallback chain on the slug (status.tenantSlug → status.customerSlug → spec.tenantSlug → spec.customerSlug).
+- `src/api.ts` / `src/main.ts`: `customerName`/`customerSlug` field references → `tenantName`/`tenantSlug`; CSS classes `customer-cell`/`customer-name`/`customer-slug` → `tenant-*`; column header `<th>Customer</th>` → `<th>Tenant</th>`.
+- `src/style.css`: matching class renames.
+- `server/main_test.go`: fixture `newKai` writes the v1alpha2-shaped fields; new `TestSummarize_FallsBackToLegacyCustomerFields` locks in the v1alpha1 backward-compat path; `TestFirstNonEmpty` extended for the variadic shape.
+- All admin-console server tests + tsc + vite build green.
+
 **Remaining phases:**
-- Phase 3 (`swarm-emai` / `swarm-config` mass rewrite): private-repo work, blocked on Phase 2 (which is now done — overlays can start using `tenantName`/`tenantSlug` whenever they're ready).
-- Phase 4 (web app dir rename `customer-chat` → `chat`, `customer-center` → `center`): one-shot `git mv` + Dockerfile + CI matrix + image-name + K8s manifest update. Coordinated with a deploy because image names change.
-- Phase 5 (CRD API group `swarm.emai.io` → `swarm.io`): conversion webhook for one minor version, every YAML in every overlay updated. Bundle with [[TASK-012]].
+- Phase 3 (`swarm-emai` / `swarm-config` mass rewrite): private-repo work, unblocked since Phase 2 landed — overlays can start using `tenantName`/`tenantSlug` whenever they're ready. Optional in the short term: v1alpha1 manifests still apply via the conversion webhook.
+- Group rename `swarm.emai.io` → `swarm.io`: deferred to a follow-up release. Option B end-state. Requires re-applying every CR in `swarm-emai` under the new group + a one-cycle dual-CRD bridge. Belongs in its own task with a planned deploy window.
 
 ## Acceptance Criteria
-- [ ] No file path, identifier, label, or CRD field in public `swarm` contains the literal word "customer" (verified by `grep -rn "customer" --exclude-dir=node_modules`) — Phase 5 end state; today only API-contract names remain
-- [ ] CRD API group renamed; conversion webhook handles old-style manifests for one minor version (Phase 5)
-- [ ] `swarm-emai` / `swarm-config` updated to use the new field/label/dir names (Phase 3, private repo)
+- [x] No file path, identifier, label, or CRD field in public `swarm` contains the literal word "customer" — *partial*: as of Phase 5 (2026-05-10) all spec-write code paths are tenant-clean (operator + 5 web apps + onboarding signup + sample manifests + templates). Remaining "customer" references are: (a) the v1alpha1 schema's `CustomerName`/`CustomerSlug` fields, kept on purpose so existing manifests in `swarm-emai` continue to validate; (b) "customer" in v1alpha1's type-doc comments, retiring with v1alpha1 itself; (c) the legacy `swarm.emai.io/customer-links` annotation key, read as a fallback in `web/workspace/server/main.go` for one release before the legacy fallback drops.
+- [ ] CRD API group renamed `swarm.emai.io` → `swarm.io` — deferred to a follow-up release (Option B end-state). Conversion webhook for the v1alpha1 → v1alpha2 schema part shipped in Phase 5 (2026-05-10).
+- [ ] `swarm-emai` / `swarm-config` updated to use the new field/label/dir names (Phase 3, private repo) — optional short-term: v1alpha1 manifests still apply through the conversion webhook.
 - [x] Docs and READMEs updated; no surviving non-contract "customer" references in public-repo docs (Phase 1.B, 2026-05-03)
-- [ ] Existing internal tenants continue to reconcile correctly throughout the migration (verified at each phase boundary)
+- [x] Existing internal tenants continue to reconcile correctly throughout the migration (verified by the conversion roundtrip tests in `api/v1alpha1/kaiinstance_conversion_test.go` + the operator's controller_test suite green on the renamed types, Phase 5)
 - [x] Phase 1.A: additive `swarm.io/tenant=<slug>` label rendered on every operator-managed child resource (2026-05-03)
 
 ## Notes

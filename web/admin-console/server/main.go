@@ -28,7 +28,7 @@ var webFS embed.FS
 
 var kaiInstanceGVR = schema.GroupVersionResource{
 	Group:    "swarm.emai.io",
-	Version:  "v1alpha1",
+	Version:  "v1alpha2",
 	Resource: "kaiinstances",
 }
 
@@ -40,9 +40,9 @@ type server struct {
 
 type instanceSummary struct {
 	Name              string `json:"name"`
-	CustomerName      string `json:"customerName"`
+	TenantName        string `json:"tenantName"`
 	ProjectName       string `json:"projectName"`
-	CustomerSlug      string `json:"customerSlug"`
+	TenantSlug        string `json:"tenantSlug"`
 	Model             string `json:"model,omitempty"`
 	Phase             string `json:"phase"`
 	Ready             bool   `json:"ready"`
@@ -54,7 +54,7 @@ type instanceSummary struct {
 
 func main() {
 	addr := envDefault("ADDR", ":8080")
-	namespace := envDefault("SWARM_NAMESPACE", "emai-swarm")
+	namespace := envDefault("SWARM_NAMESPACE", "swarm-system")
 	token := os.Getenv("ADMIN_TOKEN")
 	if token == "" {
 		log.Fatal("ADMIN_TOKEN must be set")
@@ -190,11 +190,17 @@ func summarize(u *unstructured.Unstructured) instanceSummary {
 		v, _, _ := unstructured.NestedBool(u.Object, path...)
 		return v
 	}
+	// v1alpha2 renamed customerName/customerSlug → tenantName/tenantSlug
+	// (TASK-024 Phase 5). The legacy customer* paths are still tried so an
+	// admin-console talking to a cluster that still has v1alpha1 leftovers
+	// (e.g. a swarm-emai overlay mid-migration) renders correctly. The
+	// conversion webhook normalizes most reads, but the fallback keeps the
+	// dashboard honest if a cluster ever serves the legacy version directly.
 	return instanceSummary{
 		Name:              u.GetName(),
-		CustomerName:      get("spec", "customerName"),
+		TenantName:        firstNonEmpty(get("spec", "tenantName"), get("spec", "customerName")),
 		ProjectName:       get("spec", "projectName"),
-		CustomerSlug:      firstNonEmpty(get("status", "customerSlug"), get("spec", "customerSlug")),
+		TenantSlug:        firstNonEmpty(get("status", "tenantSlug"), get("status", "customerSlug"), get("spec", "tenantSlug"), get("spec", "customerSlug")),
 		Model:             get("spec", "model"),
 		Phase:             get("status", "phase"),
 		Ready:             getBool("status", "ready"),
@@ -205,11 +211,13 @@ func summarize(u *unstructured.Unstructured) instanceSummary {
 	}
 }
 
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
 	}
-	return b
+	return ""
 }
 
 func boolStr(b bool) string {

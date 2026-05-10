@@ -1,8 +1,8 @@
 export interface InstanceSummary {
   name: string;
-  customerName: string;
+  tenantName: string;
   projectName: string;
-  customerSlug: string;
+  tenantSlug: string;
   model?: string;
   phase: string;
   ready: boolean;

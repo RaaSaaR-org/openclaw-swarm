@@ -654,7 +654,7 @@ code {
   background: var(--accent-bg);
   box-shadow: inset 2px 0 0 var(--accent);
 }
-.instance-table tbody tr.selected .customer-name { color: var(--accent); }
+.instance-table tbody tr.selected .tenant-name { color: var(--accent); }
 .instance-table tbody tr:last-child td { border-bottom: none; }
 
 .actions-col {
@@ -669,20 +669,20 @@ code {
   letter-spacing: 0;
 }
 
-.customer-cell {
+.tenant-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-.customer-cell .customer-name {
+.tenant-cell .tenant-name {
   font-weight: 500;
   font-size: 14px;
   letter-spacing: -0.005em;
   color: var(--text);
   transition: color var(--motion) var(--ease);
 }
-.customer-cell .customer-slug {
+.tenant-cell .tenant-slug {
   font-family: var(--font-mono);
   font-feature-settings: 'liga' 0;
   font-size: 11.5px;
@@ -879,7 +879,7 @@ code {
   background: var(--accent);
   flex: 0 0 5px;
 }
-.detail-section .detail-customer-name {
+.detail-section .detail-tenant-name {
   font-size: clamp(20px, 2vw, 24px);
   font-weight: 300;
   letter-spacing: -0.025em;

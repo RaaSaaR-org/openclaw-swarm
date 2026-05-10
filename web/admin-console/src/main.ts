@@ -191,7 +191,7 @@ function renderTable() {
 
   const rows = state.instances
     .slice()
-    .sort((a, b) => a.customerName.localeCompare(b.customerName))
+    .sort((a, b) => a.tenantName.localeCompare(b.tenantName))
     .map((i) => rowHtml(i))
     .join('');
 
@@ -199,7 +199,7 @@ function renderTable() {
     <table class="instance-table">
       <thead>
         <tr>
-          <th>Customer</th>
+          <th>Tenant</th>
           <th>Project</th>
           <th>Phase</th>
           <th>Ready</th>
@@ -231,8 +231,8 @@ function renderTable() {
       confirmAction(
         action === 'suspend' ? 'Suspend instance?' : 'Resume instance?',
         action === 'suspend'
-          ? `Scale ${inst.customerName} (${inst.name}) to zero replicas? Data is preserved.`
-          : `Resume ${inst.customerName} (${inst.name})?`,
+          ? `Scale ${inst.tenantName} (${inst.name}) to zero replicas? Data is preserved.`
+          : `Resume ${inst.tenantName} (${inst.name})?`,
         async () => {
           if (action === 'suspend') await api.suspend(name);
           else await api.resume(name);
@@ -254,9 +254,9 @@ function rowHtml(i: InstanceSummary): string {
   return `
     <tr data-name="${i.name}" class="${isSelected.trim()}">
       <td>
-        <div class="customer-cell">
-          <div class="customer-name">${escapeHtml(i.customerName)}</div>
-          <div class="customer-slug">${escapeHtml(i.customerSlug || i.name)}</div>
+        <div class="tenant-cell">
+          <div class="tenant-name">${escapeHtml(i.tenantName)}</div>
+          <div class="tenant-slug">${escapeHtml(i.tenantSlug || i.name)}</div>
         </div>
       </td>
       <td>${escapeHtml(i.projectName)}</td>
@@ -311,10 +311,10 @@ function renderDetail() {
   body.className = '';
   body.innerHTML = `
     <div class="detail-section">
-      <div class="detail-customer-name">${escapeHtml(inst?.customerName || state.selected)}</div>
+      <div class="detail-tenant-name">${escapeHtml(inst?.tenantName || state.selected)}</div>
       <div class="kv-grid">
         <div class="kv-key">Name</div><div class="kv-val mono">${escapeHtml(state.selected)}</div>
-        <div class="kv-key">Slug</div><div class="kv-val mono">${escapeHtml(inst?.customerSlug || '—')}</div>
+        <div class="kv-key">Slug</div><div class="kv-val mono">${escapeHtml(inst?.tenantSlug || '—')}</div>
         <div class="kv-key">Project</div><div class="kv-val">${escapeHtml(inst?.projectName || '—')}</div>
         <div class="kv-key">Phase</div><div class="kv-val">${escapeHtml(inst?.phase || '—')}</div>
         <div class="kv-key">Ready</div><div class="kv-val">${readyDot}</div>

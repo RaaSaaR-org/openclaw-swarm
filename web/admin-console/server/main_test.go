@@ -23,27 +23,27 @@ func fakeServer(t *testing.T, token string, items ...*unstructured.Unstructured)
 		objs = append(objs, it)
 	}
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objs...)
-	return &server{dyn: dyn, namespace: "emai-swarm", token: token}
+	return &server{dyn: dyn, namespace: "swarm-system", token: token}
 }
 
-func newKai(name, customer, slug, phase string, ready, suspended bool) *unstructured.Unstructured {
+func newKai(name, tenant, slug, phase string, ready, suspended bool) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      name,
-			"namespace": "emai-swarm",
+			"namespace": "swarm-system",
 		},
 		"spec": map[string]any{
-			"customerName": customer,
-			"projectName":  "Pilot",
-			"customerSlug": slug,
-			"suspended":    suspended,
+			"tenantName":  tenant,
+			"projectName": "Pilot",
+			"tenantSlug":  slug,
+			"suspended":   suspended,
 		},
 		"status": map[string]any{
-			"phase":        phase,
-			"ready":        ready,
-			"customerSlug": slug,
+			"phase":      phase,
+			"ready":      ready,
+			"tenantSlug": slug,
 		},
 	}}
 }
@@ -133,7 +133,7 @@ func TestListInstances_HappyPath(t *testing.T) {
 
 func TestListInstances_NoDynClient_503(t *testing.T) {
 	t.Parallel()
-	s := &server{namespace: "emai-swarm", token: "tok"}
+	s := &server{namespace: "swarm-system", token: "tok"}
 	rr := httptest.NewRecorder()
 	s.listInstances(rr, httptest.NewRequest(http.MethodGet, "/api/instances", nil))
 	if rr.Code != http.StatusServiceUnavailable {
@@ -215,12 +215,12 @@ func TestSummarize_PullsFieldsCorrectly(t *testing.T) {
 	t.Parallel()
 	u := newKai("kai-acme", "Acme GmbH", "acme", "Running", true, false)
 	// Add the optional URL fields directly.
-	_ = unstructured.SetNestedField(u.Object, "kai-acme.emai-swarm.svc:18789", "status", "gatewayURL")
+	_ = unstructured.SetNestedField(u.Object, "kai-acme.swarm-system.svc:18789", "status", "gatewayURL")
 	_ = unstructured.SetNestedField(u.Object, "https://acme.kai.example.com", "status", "externalURL")
 	_ = unstructured.SetNestedField(u.Object, "openrouter/anthropic/claude", "spec", "model")
 
 	s := summarize(u)
-	if s.Name != "kai-acme" || s.CustomerName != "Acme GmbH" || s.CustomerSlug != "acme" {
+	if s.Name != "kai-acme" || s.TenantName != "Acme GmbH" || s.TenantSlug != "acme" {
 		t.Errorf("identity fields wrong: %+v", s)
 	}
 	if s.Phase != "Running" || !s.Ready {
@@ -241,6 +241,43 @@ func TestFirstNonEmpty(t *testing.T) {
 	}
 	if firstNonEmpty("", "") != "" {
 		t.Error("both empty should be empty")
+	}
+	if firstNonEmpty("", "", "c", "d") != "c" {
+		t.Error("variadic should walk past leading blanks")
+	}
+	if firstNonEmpty() != "" {
+		t.Error("no args should return empty")
+	}
+}
+
+// TASK-024 Phase 5 renamed customerName/customerSlug → tenantName/tenantSlug
+// in v1alpha2. The admin-console must still render sensibly if a cluster
+// somewhere serves a legacy v1alpha1-shaped object — fall back to the old
+// keys.
+func TestSummarize_FallsBackToLegacyCustomerFields(t *testing.T) {
+	t.Parallel()
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "swarm.emai.io/v1alpha1",
+		"kind":       "KaiInstance",
+		"metadata": map[string]any{
+			"name":      "kai-legacy",
+			"namespace": "swarm-system",
+		},
+		"spec": map[string]any{
+			"customerName": "Legacy Co",
+			"customerSlug": "legacy",
+		},
+		"status": map[string]any{
+			"customerSlug": "legacy",
+			"phase":        "Running",
+		},
+	}}
+	s := summarize(u)
+	if s.TenantName != "Legacy Co" {
+		t.Errorf("expected legacy customerName fallback, got %q", s.TenantName)
+	}
+	if s.TenantSlug != "legacy" {
+		t.Errorf("expected legacy customerSlug fallback, got %q", s.TenantSlug)
 	}
 }
 
