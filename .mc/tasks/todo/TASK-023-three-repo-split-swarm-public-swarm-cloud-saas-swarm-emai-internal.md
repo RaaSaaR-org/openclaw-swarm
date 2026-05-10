@@ -71,10 +71,16 @@ One operator codebase, two deployment shapes, no forking.
 - `swarm-cloud` follows the public default: its kustomize overlay sets `namespace: swarm-system`.
 - All operator + 5 web-app + sibling-module tests green; `kubectl kustomize kubernetes/` produces clean `swarm-system`-targeted output.
 
+**Phase 5 (README cross-references) — done** on 2026-05-10. swarm-emai's README now explicitly links both [openclaw-swarm](https://github.com/RaaSaaR-org/openclaw-swarm) and [MIND-Studio/swarm-cloud](https://github.com/MIND-Studio/swarm-cloud) with a 3-repo sibling diagram. swarm-cloud's README + CLAUDE.md updated to point at the real `github.com/MIND-Studio/swarm-cloud` remote.
+
+**Phase 6 (per-repo CI) — partial, 2026-05-10**. swarm-cloud now ships `.github/workflows/ci.yml` with two jobs on every push + PR:
+- `marketing-build` — Astro static build of `web/marketing/`, fed by `SWARM_CATALOG_PATH` pointing at a fresh `RaaSaaR-org/openclaw-swarm` checkout. Catches regressions in the cross-repo catalog reader path immediately.
+- `kustomize-lint` — `kustomize build kubernetes/cloud` + `kubernetes/dev` to guard future overlay additions (ingress-kai, stripe-webhook, billing-cronjob, networkpolicy, openrouter-pool).
+
+Pinning the openclaw-swarm checkout to the latest tagged release (instead of `main`) is a refinement once the public swarm starts cutting releases. swarm-emai's CI is its own task — its deploy.sh applies public manifests directly so a CI smoke (`kustomize build ../swarm/kubernetes/...` + dry-run apply) is the natural next step there.
+
 **Remaining phases:**
-- Phase 4 — spin up the new `kai-cloud` Hetzner cluster for the SaaS deploy (deploy work, separate from this repo).
-- Phase 5 — README cross-references in all 3 repos. Public swarm + swarm-cloud + swarm-emai all reference each other; swarm-emai's README links swarm but not swarm-cloud (minor polish).
-- Phase 6 — per-repo CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
+- Phase 4 — spin up the new `kai-cloud` Hetzner cluster for the SaaS deploy + run `swarm-cloud/deploy.sh cloud`. Deploy work, separate from this repo. Closes the "working deploy of the public SaaS to a test cluster" half of AC #1, and likely flips most of TASK-017's open AC at the same time.
 
 ## References
 - Pattern: GitLab CE/EE/.com — https://about.gitlab.com/install/ce-or-ee/
