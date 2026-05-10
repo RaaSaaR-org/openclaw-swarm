@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Receipt</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">Payment received</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hi {{.Name}},</p>
+    <p style="margin:0 0 16px;line-height:1.5;">thanks for your payment. Here are the details:</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid #333;color:#aaa;">Plan</td><td style="padding:8px 0;border-bottom:1px solid #333;text-align:right;">{{.PlanName}}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #333;color:#aaa;">Period</td><td style="padding:8px 0;border-bottom:1px solid #333;text-align:right;">{{.PeriodStart}} &ndash; {{.PeriodEnd}}</td></tr>
+      <tr><td style="padding:8px 0;color:#aaa;">Amount</td><td style="padding:8px 0;text-align:right;font-weight:600;color:#fff;">{{.Amount}}</td></tr>
+    </table>
+    <p style="margin:24px 0;">
+      <a href="{{.InvoiceURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Download invoice</a>
+    </p>
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">This receipt is generated automatically. If you have any billing questions, just reply to this email.</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,21 @@
+Hi {{.Name}},
+
+{{if .IsFinalAttempt -}}
+your charge for the {{.PlanName}} plan ({{.Amount}}) failed on the final retry. Your subscription will be paused and your workspace downgraded to the free tier shortly.
+
+Your data stays put. Update your payment method to restore the {{.PlanName}} plan:
+{{.BillingURL}}
+
+Or retry now: {{.RetryURL}}
+{{- else -}}
+your charge for the {{.PlanName}} plan ({{.Amount}}) didn't go through{{if gt .AttemptCount 1}} (attempt {{.AttemptCount}}){{end}}.
+
+We'll try again on {{.RetryDate}}.
+
+To keep your workspace active, please update your payment method:
+{{.BillingURL}}
+
+Or retry now: {{.RetryURL}}
+
+If the charge keeps failing we'll pause the plan for now -- but your data stays put.
+{{- end}}

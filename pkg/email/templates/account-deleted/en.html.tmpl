@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Account being deleted</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">Your account is being deleted</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hi {{.Name}},</p>
+    <p style="margin:0 0 16px;line-height:1.5;">we got your deletion request. Your account and all workspaces are deactivated as of now.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">You have <strong>{{.GraceDays}} days</strong> to restore the account if you change your mind. Final deletion is on <strong>{{.FinalDeletionDate}}</strong> &mdash; after that, restoration is no longer possible.</p>
+    <p style="margin:24px 0;">
+      <a href="{{.RestoreURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Restore account</a>
+    </p>
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">After final deletion only an audit entry remains (a hash of your user ID + a timestamp) &mdash; no personal data. That lets us prove the deletion happened without storing new data about you.</p>
+  </div>
+</body>
+</html>

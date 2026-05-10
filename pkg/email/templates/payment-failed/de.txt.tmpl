@@ -1,0 +1,21 @@
+Hallo {{.Name}},
+
+{{if .IsFinalAttempt -}}
+die Abbuchung fuer deinen {{.PlanName}}-Tarif ueber {{.Amount}} ist beim letzten Versuch fehlgeschlagen. Wir pausieren das Abonnement -- dein Workspace wechselt in Kuerze auf den Free-Tarif.
+
+Deine Daten bleiben erhalten. Aktualisiere dein Zahlungsmittel, um den {{.PlanName}}-Tarif wiederherzustellen:
+{{.BillingURL}}
+
+Lieber gleich neu versuchen: {{.RetryURL}}
+{{- else -}}
+die Abbuchung fuer deinen {{.PlanName}}-Tarif ueber {{.Amount}} ist leider fehlgeschlagen{{if gt .AttemptCount 1}} (Versuch {{.AttemptCount}}){{end}}.
+
+Wir versuchen es erneut am {{.RetryDate}}.
+
+Damit dein Workspace aktiv bleibt, aktualisiere bitte dein Zahlungsmittel:
+{{.BillingURL}}
+
+Lieber gleich neu versuchen: {{.RetryURL}}
+
+Falls die Abbuchung wiederholt fehlschlaegt, pausieren wir den Tarif vorruebergehend -- deine Daten bleiben aber erhalten.
+{{- end}}

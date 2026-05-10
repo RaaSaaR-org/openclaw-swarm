@@ -1,0 +1,20 @@
+# Service that exposes the operator pod's webhook port (default 9443) so the
+# kube-apiserver can call the conversion webhook for KaiInstance v1alpha1 ↔
+# v1alpha2 (TASK-012 Phase 2.B + TASK-024 Phase 5). The Service name is
+# referenced from the CRD's spec.conversion.webhook.clientConfig.service.
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: webhook-service
+  namespace: system
+spec:
+  ports:
+    - name: webhook
+      port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    control-plane: controller-manager

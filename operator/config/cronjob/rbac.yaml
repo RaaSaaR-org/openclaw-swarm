@@ -1,0 +1,46 @@
+# RBAC for the usage-monitor CronJob (TASK-019 Phase 3). The CronJob runs
+# in the operator's namespace but reads + patches KaiInstances in the
+# workspaces namespace (`swarm-system` by default). ClusterRole + namespace
+# RoleBinding gives the SA cross-namespace access without granting cluster-
+# wide privilege. Verbs are the minimum the Runner actually uses.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: usage-monitor
+  namespace: system
+  labels:
+    app.kubernetes.io/name: usage-monitor
+    app.kubernetes.io/component: cron
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: usage-monitor
+  labels:
+    app.kubernetes.io/name: usage-monitor
+rules:
+  - apiGroups: ["swarm.emai.io"]
+    resources: ["kaiinstances"]
+    verbs: ["list", "get", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+# RoleBinding in the workspaces namespace — granting permissions to the
+# operator-system SA from a remote namespace. Replace `swarm-system` here if
+# the deploy uses a different workspaces namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: usage-monitor
+  namespace: swarm-system
+  labels:
+    app.kubernetes.io/name: usage-monitor
+subjects:
+  - kind: ServiceAccount
+    name: usage-monitor
+    namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: usage-monitor

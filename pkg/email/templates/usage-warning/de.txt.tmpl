@@ -1,0 +1,12 @@
+Hallo {{.Name}},
+
+dein Workspace {{.WorkspaceName}} hat heute {{.UsedPct}} % des Tageskontingents verbraucht.
+
+Wenn du das Limit erreichst, pausiert der Workspace bis zum naechsten Reset.
+
+Naechster Reset: {{.ResetAt}}
+
+Tarif aendern, um sofort mehr Kontingent zu bekommen:
+{{.UpgradeURL}}
+
+Diese Mail bekommst du einmal pro Tag, wenn der Verbrauch 80 % uebersteigt.

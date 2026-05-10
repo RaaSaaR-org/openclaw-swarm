@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Quittung</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">Zahlung erhalten</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hallo {{.Name}},</p>
+    <p style="margin:0 0 16px;line-height:1.5;">danke fuer deine Zahlung. Hier die Details:</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid #333;color:#aaa;">Tarif</td><td style="padding:8px 0;border-bottom:1px solid #333;text-align:right;">{{.PlanName}}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #333;color:#aaa;">Zeitraum</td><td style="padding:8px 0;border-bottom:1px solid #333;text-align:right;">{{.PeriodStart}} &ndash; {{.PeriodEnd}}</td></tr>
+      <tr><td style="padding:8px 0;color:#aaa;">Betrag</td><td style="padding:8px 0;text-align:right;font-weight:600;color:#fff;">{{.Amount}}</td></tr>
+    </table>
+    <p style="margin:24px 0;">
+      <a href="{{.InvoiceURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Rechnung herunterladen</a>
+    </p>
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">Diese Quittung wird automatisch erstellt. Bei Fragen zur Abrechnung antworte einfach auf diese Mail.</p>
+  </div>
+</body>
+</html>

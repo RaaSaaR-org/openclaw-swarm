@@ -1,0 +1,41 @@
+# cert-manager Issuer + Certificate that provisions the TLS cert mounted into
+# the operator pod for the conversion webhook. The CA bundle is referenced
+# from the CRD via the `cert-manager.io/inject-ca-from` annotation.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: selfsigned-issuer
+  namespace: system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: serving-cert
+  namespace: system
+spec:
+  # Service name after the kustomize namePrefix `operator-`: the certificate
+  # covers the in-cluster DNS names the kube-apiserver uses when calling the
+  # webhook Service. Both forms are listed so the cert validates whether the
+  # apiserver dials with or without the cluster suffix.
+  dnsNames:
+    - operator-webhook-service.operator-system.svc
+    - operator-webhook-service.operator-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    # Note: this anticipates the `operator-` prefix that the parent
+    # `config/default/kustomization.yaml` namePrefix applies to the
+    # Issuer's metadata.name. Kustomize re-prefixes the Issuer's
+    # metadata.name automatically but does NOT propagate the prefix
+    # into this `issuerRef.name` cross-reference — leaving this as
+    # `selfsigned-issuer` would point at a non-existent Issuer at deploy
+    # time. (Verified end-to-end on k3d, 2026-05-10.)
+    name: operator-selfsigned-issuer
+  secretName: webhook-server-cert

@@ -1,0 +1,3 @@
+resources:
+- usage-monitor.yaml
+- rbac.yaml

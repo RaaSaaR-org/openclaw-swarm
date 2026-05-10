@@ -1,0 +1,69 @@
+# usage-monitor CronJob (TASK-019 Phase 3). Runs once a day at 00:30 UTC,
+# 30 minutes after OpenRouter's daily-usage counter resets at 00:00 UTC.
+# The pass walks every KaiInstance labelled `swarm.io/managed: saas`,
+# polls each one's per-workspace OpenRouter key for daily usage, and
+# patches `spec.suspended=true` when the usage exceeds the tier's
+# DailyDollars cap from pkg/quotas.
+#
+# Image: same operator image, `/usage-monitor` entry point. The kustomize
+# overlay in config/default + config/cronjob hands kustomize the same
+# image-tag so a single `make deploy IMG=…` ships both the controller and
+# the cron from the same build artifact.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: usage-monitor
+  namespace: system
+  labels:
+    app.kubernetes.io/name: usage-monitor
+    app.kubernetes.io/component: cron
+spec:
+  # Daily at 00:30 UTC; concurrencyPolicy: Forbid so a slow run doesn't
+  # overlap with the next one (cluster-wide list + per-workspace HTTPS
+  # reads add up if the customer count grows).
+  schedule: "30 0 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0  # one shot per fire; we don't want a flapping read to spam OpenRouter
+      activeDeadlineSeconds: 600  # hard ceiling; matches the binary's --timeout default
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: usage-monitor
+        spec:
+          serviceAccountName: usage-monitor
+          restartPolicy: Never
+          containers:
+            - name: usage-monitor
+              image: controller:latest  # kustomize image patch swaps to the released tag
+              imagePullPolicy: IfNotPresent
+              command: ["/usage-monitor"]
+              args:
+                - --namespace=$(SWARM_NAMESPACE)
+                - --timeout=8m
+              env:
+                - name: SWARM_NAMESPACE
+                  value: swarm-system  # kustomize replacement targets this for non-default namespaces
+                # TASK-019 Phase 4: opt-in Prometheus pushgateway emission.
+                # Leave empty (or remove the env var entirely) to disable the
+                # metric branch — the cron just suspends + emails without
+                # publishing metrics. When set, the cron pushes once per pass
+                # at the end with HTTP PUT (replace-job semantics).
+                - name: KAI_PUSHGATEWAY_URL
+                  value: ""  # e.g. http://prometheus-pushgateway.monitoring.svc:9091
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true

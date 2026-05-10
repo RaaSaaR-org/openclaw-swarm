@@ -1,0 +1,9 @@
+resources:
+- service.yaml
+- manifests.yaml
+# +kubebuilder:scaffold:webhookconfigurations
+
+patches:
+# Inject the cert-manager CA bundle into the VWC so the kube-apiserver
+# trusts the operator's self-signed serving cert when calling /validate-*.
+- path: cainjection_patch.yaml

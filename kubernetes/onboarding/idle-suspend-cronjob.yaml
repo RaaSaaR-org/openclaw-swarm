@@ -1,0 +1,78 @@
+# idle-suspend CronJob (TASK-015 Phase 3). Once a day at 04:00 UTC, walks
+# every SaaS-managed KaiInstance, looks up the owning User, and patches
+# `spec.suspended=true` when User.LastLoginAt is older than
+# `pkg/quotas.For(tier).IdleSuspendAfter` (free tier = 14 days; paid tiers
+# never auto-suspend because they keep IdleSuspendAfter=0).
+#
+# Image: same onboarding image — the Dockerfile builds /onboarding,
+# /gdpr-purge, and /idle-suspend into one artifact; this CronJob's
+# entrypoint picks /idle-suspend.
+#
+# Schedule: 04:00 UTC. One hour after the GDPR purge cron at 03:00 UTC so
+# the two cron pods don't compete for the cluster's tight memory headroom
+# on the cloud node. The operator's usage-monitor cron at 00:30 UTC is
+# also well clear.
+#
+# RBAC: needs `kaiinstances` list + patch in the workspace namespace.
+# The `onboarding` ServiceAccount already has list (used at signup time)
+# but NOT patch — the swarm-cloud overlay extends the ClusterRole when
+# this cron is enabled.
+#
+# Secrets: same `onboarding-postgres` Secret as gdpr-purge — both crons
+# need read access to the `users` table.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: idle-suspend
+  labels:
+    app.kubernetes.io/name: idle-suspend
+    app.kubernetes.io/component: cron
+    app.kubernetes.io/part-of: onboarding
+spec:
+  # Daily at 04:00 UTC. concurrencyPolicy: Forbid so a long-running pass
+  # never overlaps with the next fire (a normal pass is seconds; the
+  # guardrail is for the failure mode where the cluster API is slow).
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0  # one shot per fire — transient errors retry tomorrow, not in 5 minutes
+      activeDeadlineSeconds: 600  # hard ceiling; matches binary --timeout default of 5m + 5m slack
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: idle-suspend
+        spec:
+          serviceAccountName: onboarding
+          restartPolicy: Never
+          containers:
+            - name: idle-suspend
+              image: ghcr.io/raasaar-org/openclaw-swarm/onboarding:latest
+              imagePullPolicy: IfNotPresent
+              command: ["/idle-suspend"]
+              env:
+                - name: KAI_USERS_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: onboarding-postgres
+                      key: dsn
+                - name: SWARM_NAMESPACE
+                  value: swarm-system
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                # Distroless `nonroot` is UID 65532 — kubelet refuses to
+                # verify a non-numeric image USER against `runAsNonRoot`.
+                runAsUser: 65532
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true

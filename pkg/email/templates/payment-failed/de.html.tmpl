@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>{{if .IsFinalAttempt}}Letzte Mahnung — Zahlung fehlgeschlagen{{else}}Zahlung fehlgeschlagen{{end}}</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">{{if .IsFinalAttempt}}Letzte Mahnung — Zahlung fehlgeschlagen{{else}}Zahlung fehlgeschlagen{{end}}</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hallo {{.Name}},</p>
+    {{- if .IsFinalAttempt}}
+    <p style="margin:0 0 16px;line-height:1.5;">die Abbuchung fuer deinen <strong>{{.PlanName}}</strong>-Tarif ueber {{.Amount}} ist beim letzten Versuch fehlgeschlagen. Wir pausieren das Abonnement &mdash; dein Workspace wechselt in Kuerze auf den Free-Tarif.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">Deine Daten bleiben erhalten. Aktualisiere dein Zahlungsmittel, um den {{.PlanName}}-Tarif wiederherzustellen:</p>
+    {{- else}}
+    <p style="margin:0 0 16px;line-height:1.5;">die Abbuchung fuer deinen <strong>{{.PlanName}}</strong>-Tarif ueber {{.Amount}} ist leider fehlgeschlagen{{if gt .AttemptCount 1}} (Versuch {{.AttemptCount}}){{end}}. Wir versuchen es erneut am <strong>{{.RetryDate}}</strong>.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">Damit dein Workspace aktiv bleibt, aktualisiere bitte dein Zahlungsmittel:</p>
+    {{- end}}
+    <p style="margin:24px 0;">
+      <a href="{{.BillingURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Zahlungsmittel aktualisieren</a>
+    </p>
+    <p style="margin:0 0 16px;line-height:1.5;color:#aaa;font-size:13px;">Wenn du es lieber gleich neu versuchen moechtest: <a href="{{.RetryURL}}" style="color:#FF6700;">jetzt erneut abbuchen</a>.</p>
+    {{- if not .IsFinalAttempt}}
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">Falls die Abbuchung wiederholt fehlschlaegt, pausieren wir den Tarif vorruebergehend &mdash; deine Daten bleiben aber erhalten.</p>
+    {{- end}}
+  </div>
+</body>
+</html>

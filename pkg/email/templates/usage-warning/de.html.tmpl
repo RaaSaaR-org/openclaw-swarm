@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Tageskontingent fast voll</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">Tageskontingent fast voll</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hallo {{.Name}},</p>
+    <p style="margin:0 0 16px;line-height:1.5;">dein Workspace <strong>{{.WorkspaceName}}</strong> hat heute bereits <strong>{{.UsedPct}} %</strong> des Tageskontingents verbraucht. Wenn du das Limit erreichst, pausiert der Workspace bis zum naechsten Reset.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">Naechster Reset: <strong>{{.ResetAt}}</strong>.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">Wenn du heute weiterarbeiten moechtest, kannst du auf einen groesseren Tarif wechseln &mdash; das hebt das Tageskontingent sofort an:</p>
+    <p style="margin:24px 0;">
+      <a href="{{.UpgradeURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Tarif aendern</a>
+    </p>
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">Diese Mail bekommst du einmal pro Tag, wenn der Verbrauch 80 % uebersteigt. Du musst nichts tun, wenn dir das Pausieren am Tagesende reicht.</p>
+  </div>
+</body>
+</html>

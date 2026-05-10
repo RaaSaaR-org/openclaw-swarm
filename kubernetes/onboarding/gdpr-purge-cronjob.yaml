@@ -1,0 +1,77 @@
+# gdpr-purge CronJob (TASK-021 Phase 2). Once a day at 03:00 UTC, hard-deletes
+# every soft-deleted user older than `pkg/users.GracePeriod` (30 days). The
+# `pkg/users.Store.PurgeDeletedBefore` primitive (Phase 0) does the actual
+# work; this CronJob is the schedule + container shell.
+#
+# Image: same onboarding image (the Dockerfile builds both /onboarding and
+# /gdpr-purge into one artifact); the CronJob entrypoint picks /gdpr-purge.
+#
+# Schedule: 03:00 UTC. Lines up with the European overnight low-traffic
+# window and is well clear of the operator's usage-monitor cron at 00:30 UTC,
+# so the two cron pods don't share a tight resource window. The exact minute
+# isn't load-bearing — Postgres can absorb one DELETE statement at any time.
+#
+# Secrets: the DSN lives in a `onboarding-postgres` Secret with key `dsn`.
+# Same Secret the onboarding server consumes once `KAI_USERS_DSN` wiring
+# lands on the server side (the public swarm repo today still uses the
+# in-memory user store; the swarm-cloud overlay flips that to the PoolStore
+# and creates this Secret).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gdpr-purge
+  labels:
+    app.kubernetes.io/name: gdpr-purge
+    app.kubernetes.io/component: cron
+    app.kubernetes.io/part-of: onboarding
+spec:
+  # Daily at 03:00 UTC. concurrencyPolicy: Forbid so a long-running pass
+  # never overlaps with the next fire (a real purge is sub-second; the
+  # guardrail is for the failure mode where the DB is slow).
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0  # one shot per fire — a transient DB error retries tomorrow, not in 5 minutes
+      activeDeadlineSeconds: 600  # hard ceiling; matches the binary's --timeout default of 5m + 5m slack
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: gdpr-purge
+        spec:
+          serviceAccountName: onboarding
+          restartPolicy: Never
+          containers:
+            - name: gdpr-purge
+              image: ghcr.io/raasaar-org/openclaw-swarm/onboarding:latest
+              imagePullPolicy: IfNotPresent
+              command: ["/gdpr-purge"]
+              env:
+                - name: KAI_USERS_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: onboarding-postgres
+                      key: dsn
+                # Optional: shrink the grace window in staging by setting
+                # KAI_GDPR_GRACE here (e.g. "168h" for 7 days). Production
+                # leaves it unset → the binary uses pkg/users.GracePeriod.
+                # - name: KAI_GDPR_GRACE
+                #   value: "720h"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                # Distroless `nonroot` is UID 65532 — kubelet refuses to
+                # verify a non-numeric image USER against `runAsNonRoot`.
+                runAsUser: 65532
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true

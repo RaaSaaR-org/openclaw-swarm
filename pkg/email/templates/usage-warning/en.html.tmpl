@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Daily quota almost full</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#141414;color:#eee;margin:0;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#1f1f1f;padding:32px;border-radius:8px;">
+    <h1 style="color:#FF6700;margin:0 0 16px;font-size:22px;">Daily quota almost full</h1>
+    <p style="margin:0 0 16px;line-height:1.5;">Hi {{.Name}},</p>
+    <p style="margin:0 0 16px;line-height:1.5;">your workspace <strong>{{.WorkspaceName}}</strong> has used <strong>{{.UsedPct}}%</strong> of today's quota. When you hit the limit, the workspace pauses until the next reset.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">Next reset: <strong>{{.ResetAt}}</strong>.</p>
+    <p style="margin:0 0 16px;line-height:1.5;">If you want to keep working today, upgrading the plan lifts the daily quota right away:</p>
+    <p style="margin:24px 0;">
+      <a href="{{.UpgradeURL}}" style="background:#FF6700;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Change plan</a>
+    </p>
+    <p style="margin:24px 0 0;line-height:1.5;color:#aaa;font-size:13px;">You'll get this once per day when usage crosses 80%. You don't have to do anything if pausing at end-of-day is fine for you.</p>
+  </div>
+</body>
+</html>

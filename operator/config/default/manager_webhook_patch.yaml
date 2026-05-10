@@ -1,0 +1,33 @@
+# Mounts the cert-manager-provisioned TLS cert into the operator container
+# so its webhook server can serve `/convert` for KaiInstance v1alpha1 ↔
+# v1alpha2 conversion (TASK-012 Phase 2.B + TASK-024 Phase 5). The Secret
+# `webhook-server-cert` is filled by cert-manager from the `serving-cert`
+# Certificate; the pod won't start until cert-manager has populated it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        ports:
+        - containerPort: 9443
+          name: webhook
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-cert
+          readOnly: true
+      volumes:
+      - name: webhook-cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
