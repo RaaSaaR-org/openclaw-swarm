@@ -4,7 +4,7 @@ aliases:
 - TASK-014
 title: 'User account model: one user owns many workspaces (KaiInstances)'
 slug: user-account-model-one-user-owns-many-workspaces-kaiinstances
-status: in-progress
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -17,8 +17,9 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-09
 ---
+
 
 
 

@@ -4,7 +4,7 @@ aliases:
 - TASK-012
 title: 'KaiInstance CRD: tenancy fields (tier, quotas) + multi-app catalog'
 slug: kaiinstance-crd-tenancy-fields-tier-quotas-multi-app-catalog
-status: in-progress
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -17,8 +17,9 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-10
 ---
+
 
 
 
@@ -62,9 +63,22 @@ This is the boundary between "internal customer management tool" and "SaaS platf
 
 **Phase 2.A (additive fields on v1alpha1) — done** on 2026-05-03. Five new optional fields landed on `KaiInstanceSpec`: `tier` (enum), `userRef` (Postgres user.id), `appRef` (catalog persona slug), `org` (cost-center label), `managed` (saas|internal). All optional, all default to empty, all skip cleanly when unset so existing tenants in `swarm-emai`/`swarm-config` keep their current rendered output. Operator now renders `swarm.io/{user-id, tier, app, org, managed}` labels on every child resource (Deployment, Service, ConfigMap, PVC, NetworkPolicy, Ingress) when the matching Spec field is set. Generated CRD (`config/crd/bases/swarm.emai.io_kaiinstances.yaml`) regenerated. Four new operator tests cover both branches (empty Spec → no SaaS labels; populated Spec → all labels rendered + propagated to pod template).
 
-**Remaining work:**
-- Phase 2.B (v1alpha2 + conversion webhook): the actual rename (`customerSlug` → `tenantSlug`, `customerName` → `tenantName`, API group `swarm.emai.io` → `swarm.io`) bundled with [[TASK-024]] phases 2-5. Deliberately deferred — `git mv`-shaped renames are a coordinated deploy.
-- Phase 2.C (ValidatingAdmissionWebhook for tier-based quotas): blocked on TASK-019 Phase 1 (per-tier resource defaults) so the webhook has something concrete to enforce.
+**Phase 2.B (v1alpha2 + conversion webhook) — done** on 2026-05-10. Picked **Option A** of the architectural fork (kept the API group `swarm.emai.io`, dropped `customerName`/`customerSlug` from v1alpha2 only) — Option B (rename group to `swarm.io`) requires a one-time migration of every CR in `swarm-emai` and was deferred to a follow-up release for risk reasons. Concrete drop:
+- New `operator/api/v1alpha2/` package with the tenant-clean schema (drops `customerName`/`customerSlug` entirely; `tenantName` required, `tenantSlug` optional). v1alpha2 is `+kubebuilder:storageversion`, marks itself as the conversion `Hub` (`Hub()` method).
+- `operator/api/v1alpha1/kaiinstance_conversion.go` implements `ConvertTo(Hub)` + `ConvertFrom(Hub)`. Five conversion tests cover tenant-wins-over-customer precedence, legacy-only fold, all nested/optional fields (Telegram, GatewayAuth, Resources, ExternalAccess, Status), v1alpha2→v1alpha1 round-trip populates BOTH name fields.
+- Operator reconciler + controller tests + suite mass-renamed v1alpha1 → v1alpha2; reads `kai.Spec.TenantName` / `kai.Spec.TenantSlug` directly (the conversion webhook handles old v1alpha1 manifests at the API-server boundary).
+- Webhook server registered in `cmd/main.go` via `mgr.GetWebhookServer().Register("/convert", conversion.NewWebhookHandler(...))`.
+- All 5 web apps repointed at `swarm.emai.io/v1alpha2` GVR (operator, chat, workspace, admin-console, onboarding, status-page). Onboarding's `buildSaaSKaiInstance` now writes `spec.tenantName` / `spec.tenantSlug`.
+- Generated CRD manifest now serves both versions (`v1alpha1` legacy, `v1alpha2` storage); kustomize chain wires conversion (`config/crd/patches/webhook_in_kaiinstances.yaml`), CA injection (`cainjection_in_kaiinstances.yaml`), webhook Service (`config/webhook/service.yaml`), cert-manager Issuer + Certificate (`config/certmanager/`), and a Deployment patch that mounts the cert + opens port 9443 (`config/default/manager_webhook_patch.yaml`).
+- Sample manifests (`operator/config/samples/*.yaml`, `quickstart.yaml`, `templates/{project,research,support}-assistant/kai.yaml.tmpl`) bumped to `apiVersion: swarm.emai.io/v1alpha2` + `tenantName`/`tenantSlug`.
+- `kubectl apply -f` of an existing v1alpha1 manifest in `swarm-emai` keeps working — the conversion webhook folds `customerName` → `tenantName` (and `customerSlug` → `tenantSlug`) on the API-server side. RBAC verbs stay the same (`apiGroups: ["swarm.emai.io"]` covers all versions). The `operator-system` namespace must have cert-manager installed before this deploy lands; without cert-manager the CRD's `caBundle` stays empty and the kube-apiserver refuses every operation on KaiInstance CRs.
+
+All operator tests green (api/v1alpha1, internal/controller); all 5 web app test suites green.
+
+**Phase 2.C (ValidatingAdmissionWebhook for tier-based quotas) — done** on 2026-05-10. Bundled with [[TASK-015]] Phase 2 — the same webhook satisfies both tasks. `operator/internal/webhook/v1alpha2/kaiinstance_webhook.go` rejects creates/updates whose `spec.resources` exceed `pkg/quotas.For(tier)` ceilings; SaaS-enrolled tenants only (`spec.tier` set + `spec.managed != "internal"`). Seven webhook tests cover legacy passthrough, internal-managed passthrough, over-tier rejection, within-tier acceptance, update-path check, unknown-tier rejection, delete always allowed. Generated `config/webhook/manifests.yaml` ValidatingWebhookConfiguration uses the same cert-manager-injected CA bundle as the conversion webhook.
+
+**Remaining work (out of scope for this task):**
+- Group rename `swarm.emai.io` → `swarm.io`: deferred to a follow-up release. End-state of Option B in the architectural fork — tracked in [[TASK-028]]. swarm-emai overlays would re-apply every manifest under the new group. Not an acceptance criterion of this task; listed for context.
 
 ## Acceptance Criteria
 **Phase 1:**
@@ -73,9 +87,10 @@ This is the boundary between "internal customer management tool" and "SaaS platf
 
 **Phase 2:**
 - [x] CRD updated with new fields (`tier`, `userRef`, `appRef`, `org`, `managed`), generated manifests committed (Phase 2.A, 2026-05-03)
-- [x] Existing customers continue to reconcile cleanly — new fields are optional and default to empty (Phase 2.A)
-- [ ] ValidatingWebhook rejects out-of-tier resource requests (Phase 2.C, blocked on TASK-019)
-- [x] Test coverage for label rendering with both populated and empty Spec fields (Phase 2.A)
+- [x] Existing customers continue to reconcile cleanly — new fields are optional and default to empty (Phase 2.A); v1alpha1 manifests still apply via the conversion webhook (Phase 2.B, 2026-05-10)
+- [x] ValidatingWebhook rejects out-of-tier resource requests (Phase 2.C, 2026-05-10 — bundled with TASK-015 Phase 2; `operator/internal/webhook/v1alpha2.KaiInstanceValidator` + 7 tests)
+- [x] Test coverage for label rendering with both populated and empty Spec fields (Phase 2.A); conversion roundtrip + nested-field tests added (Phase 2.B, 2026-05-10)
+- [x] Phase 2.B: v1alpha2 schema + conversion webhook (2026-05-10)
 
 ## Notes
 **Do not start Phase 2 without Phase 1 sign-off.** This is the highest-leverage CRD change since v1alpha1 was created — getting it right matters more than shipping fast. Hold this task open in `backlog` until the SaaS direction is committed.

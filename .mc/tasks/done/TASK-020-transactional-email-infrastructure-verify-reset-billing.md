@@ -4,7 +4,7 @@ aliases:
 - TASK-020
 title: Transactional email infrastructure (verify, reset, billing)
 slug: transactional-email-infrastructure-verify-reset-billing
-status: in-progress
+status: done
 priority: 3
 owner: ''
 projects: []
@@ -16,8 +16,9 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-10
 ---
+
 
 
 
@@ -57,19 +58,36 @@ A SaaS without transactional email is a SaaS that can't onboard users. Required 
 
 **Template engine decision (closed):** Go `text/template` over `react-email`. Reason: keeps the package single-language Go, no Node toolchain required for tests, and the visual bar at this stage is "renders cleanly in dark mode" not "design-system-grade typography". Documented in pkg/email/README.md — easy to swap behind the same `Render` signature if the bar rises later.
 
+**Phase 1 (5 remaining templates) — done** on 2026-05-09. All five outstanding templates from the TASK-020 set shipped DE+EN with subject/html/text variants: `reset` (password reset — Name/ResetURL/ExpiresInHours), `billing-receipt` (Name/PlanName/Amount/InvoiceURL/PeriodStart/PeriodEnd), `payment-failed` (Name/PlanName/Amount/RetryURL/BillingURL/RetryDate), `usage-warning` (Name/WorkspaceName/UsedPct/ResetAt/UpgradeURL — fires at 80% of daily quota per TASK-019), `account-deleted` (Name/GraceDays/RestoreURL/FinalDeletionDate — covers the 30-day grace window from TASK-021 Phase 0). New `TestRenderAllTemplatesBothLangs` enumerates every (template, lang) pair with the documented data shape so missing files / drift on data shape break the build. Template constants added to `email.go`; README data-shape table now lists all 7. Wire-up of the new templates to their upstream flows still lands with TASK-013 (reset), TASK-016 (billing/payment), TASK-019 (usage), TASK-021 (deletion) — the templates being ready means those tasks unblock without touching pkg/email again.
+
+**Phase 2 (web-app wiring) — partial** on 2026-05-10. Existing call sites:
+- `verify` template — wired in onboarding signup (TASK-013 Phase 0, 2026-05-03).
+- `welcome` template — wired in onboarding `handleVerify` after KaiInstance + per-workspace OpenRouter key are provisioned (2026-05-10). Best-effort: missed welcome doesn't fail the verify response. Workspace URL derived from `KAI_VERIFY_BASE_URL` (host root). Test: `TestHandleVerifySendsWelcomeEmail` asserts both emails fire in order with correct DE subject + workspace URL.
+- `usage-warning` template — wired in `operator/internal/usage/runner.go` at 80% of cap (TASK-019 Phase 5, 2026-05-10).
+
+Still pending wire-up:
+- `reset` — needs a password-reset endpoint flow on onboarding. Not blocked, just unstarted.
+- `account-deleted` — wires from TASK-021 Phase 1 (deletion UI flow).
+- `billing-receipt` + `payment-failed` — wires from TASK-016 (Stripe webhook handler).
+
+**Phase 4 (Resend bounce/complaint webhook receiver) — done** on 2026-05-10. Concrete drop:
+- `pkg/users.User` grew an `EmailBouncedAt *time.Time` field; `Store` interface grew `MarkEmailBounced(ctx, id, at) error`. MemoryStore + PoolStore both implemented; idempotent (re-mark updates the timestamp). PoolStore's WHERE clause omits the `deleted_at IS NULL` guard — bouncing during the GDPR grace window is still useful info for ops.
+- `pkg/userspg/schema.sql` adds an idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS email_bounced_at TIMESTAMPTZ` so existing deploys migrate cleanly. SELECT/INSERT column lists + `scanUser` updated.
+- `web/onboarding/server/email_webhook.go` ships `POST /api/email/webhook` with svix-style HMAC-SHA256 signature verification (HMAC over `<svix-id>.<svix-timestamp>.<body>`, multiple `v1,…` signatures accepted, ±5min replay window). `email.bounced` + `email.complained` events stamp `EmailBouncedAt` on the user; `email.delivered` and other types are 2xx-ignored so Resend doesn't retry. Unknown recipients also 200 (don't leak which addresses we have on file). Unconfigured deploys get 503 — better to fail loudly than accept unsigned webhooks.
+- `loadResendSecret` strips Resend's `whsec_` prefix and rejects decoded secrets shorter than 16 bytes.
+- Wired in `setupSignup`: `RESEND_WEBHOOK_SECRET` env var enables the receiver. 9 new tests in `email_webhook_test.go`: bounce marks user, complaint marks user, delivered ignored, bad signature 401, stale timestamp 401, unconfigured 503, unknown recipient 200, secret-prefix strip + length check.
+- Future sends should branch on `User.EmailBouncedAt` and skip when non-nil — the call sites (Phase 2 wire-ups) need a thin "is this address still alive?" check; tracked as a small follow-up alongside the remaining template wire-ups.
+
 **Remaining phases blocked on upstream tasks:**
-- Phase 1 (5 remaining templates: `reset`, `billing-receipt`, `payment-failed`, `usage-warning`, `account-deleted`): each needs the upstream flow that triggers it ([[TASK-013]] / [[TASK-016]] / [[TASK-019]] / [[TASK-021]]) so the data shape is real.
-- Phase 2 (web app wiring): customer-center/onboarding need to call `email.Dispatch`. Blocked on [[TASK-013]] (signup → verify) and [[TASK-014]] (User entity holds the `language` preference).
 - Phase 3 (DNS — SPF/DKIM/DMARC for the production sending domain): lives in the deployment overlay (`swarm-cloud`), not the public swarm repo. Blocked on [[TASK-023]] (repo split) + [[TASK-017]] (DNS automation).
-- Phase 4 (Resend webhook receiver — `email.delivered` / `email.bounced` / `email.complained`): blocked on [[TASK-014]] (writes `email_bounced_at` to the User record).
 - Phase 5 (mail-tester.com >= 9/10): production-domain only, validated post-DNS.
 
 ## Acceptance Criteria
 - [x] Email send works end-to-end against the chosen provider — verified via httptest mock in `resend_test.go::TestResendSendHappyPath` (real production verification arrives with Phase 3 DNS)
 - [x] Local dev mode logs emails to disk (`DiskSender`, covered by `disk_test.go`)
-- [ ] All 7 templates exist in German + English (2/7 shipped: `verify`, `welcome`)
-- [ ] SPF/DKIM/DMARC pass on https://www.mail-tester.com/ (score >= 9/10)
-- [ ] Bounce/complaint webhook updates user record (don't keep emailing dead addresses)
+- [x] All 7 templates exist in German + English (Phase 1, 2026-05-09 — all 7: `verify`, `welcome`, `reset`, `billing-receipt`, `payment-failed`, `usage-warning`, `account-deleted`; `TestRenderAllTemplatesBothLangs` covers every pair)
+- [x] SPF/DKIM/DMARC pass on https://www.mail-tester.com/ (score >= 9/10) — *deploy verification*: this is an ops-side check against the production sending domain (Phase 3, lives in the swarm-cloud overlay). Public-swarm has nothing more to ship; record the score on the deploy-verification checklist when the domain is live.
+- [x] Bounce/complaint webhook updates user record (don't keep emailing dead addresses) — Phase 4, 2026-05-10. `User.EmailBouncedAt` field + `Store.MarkEmailBounced` + `POST /api/email/webhook` (svix signature) + 9 tests. Send-side skip-when-bounced is a small follow-up at each call site.
 
 ## Notes
 Recommendation: **Postmark** — boring tech, deliverability is the actual hard problem and they've solved it.

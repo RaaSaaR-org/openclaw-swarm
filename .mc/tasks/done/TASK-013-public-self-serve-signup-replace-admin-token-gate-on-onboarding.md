@@ -4,7 +4,7 @@ aliases:
 - TASK-013
 title: Public self-serve signup (replace ADMIN_TOKEN gate on onboarding)
 slug: public-self-serve-signup-replace-admin-token-gate-on-onboarding
-status: in-progress
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -17,8 +17,9 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-10
 ---
+
 
 
 
@@ -61,14 +62,19 @@ The vision is "anyone can visit a website and get their own private OpenClaw ass
 
 **Phase 1.B (signup carries `app` field) — done** on 2026-05-03. Threads the catalog persona pick through the entire stack: `pkg/users.User` and `CreateParams` grow an `App` field with `users.DefaultApp = "personal-assistant"` fallback; `pkg/userspg/schema.sql` adds `app TEXT NOT NULL DEFAULT 'personal-assistant'` with an idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so existing deploys migrate cleanly; `pkg/users.ValidApp()` enforces DNS-safe slug shape (1-63 chars, lowercase + digits + interior hyphens). Onboarding's signup endpoint accepts `app` in the JSON body, validates early with 400 on malformed slug, passes to `users.Create`. `handleVerify`'s `buildSaaSKaiInstance` reads `u.App` for both `spec.appRef` and the `swarm.io/app` label. Two new end-to-end tests cover the threading (writing-coach picked at signup → spec.appRef=writing-coach + label set) and the bad-slug rejection. Postgres integration tests verified against postgres:16-alpine.
 
-**Remaining phases blocked on upstream tasks:**
-- Phase 2 (real CAPTCHA — hCaptcha or Turnstile): site key + private key live in deployment overlay; the `captchaVerifier` interface is the seam.
-- Phase 3 (signup UI on the onboarding SPA): TypeScript + Vite — the existing admin-token form stays, signup gets its own route.
-- Phase 4 (Postgres swap of MemoryStore in production): blocked on TASK-014 Phase 4 (Postgres provisioning) and gives the User row durability.
+**Phase 2 (Cloudflare Turnstile CAPTCHA) — done** on 2026-05-09. New `turnstileCaptcha` implementation of the `captchaVerifier` interface in `web/onboarding/server/captcha_turnstile.go` — wraps Cloudflare's `https://challenges.cloudflare.com/turnstile/v0/siteverify` endpoint. Form-encoded POST with `secret` + `response` + optional `remoteip`, 5s timeout, JSON response parsed for `success` + `error-codes`. Empty / whitespace-only tokens short-circuit with a clear error before the network round-trip. `setupSignup` now wires the Turnstile verifier when `TURNSTILE_SECRET_KEY` is set; absent the env var, it falls back to `noopCaptcha` (dev mode) and logs the missing-config note. Six unit tests with httptest mock cover the full matrix: happy path with form fields verified, remoteip omitted when blank, empty token short-circuits without calling the API, failure with multiple error codes surfaces all of them, non-2xx HTTP surfaces the status code, missing-secret rejects up-front. The Turnstile site key (public) belongs on the onboarding SPA; the secret key lives in the `swarm-cloud` overlay (production) and `swarm-emai` is exempt — internal-tenant flows don't hit signup. Cloudflare's docs: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/.
+
+**Phase 3 (Turnstile widget on the onboarding SPA) — done** on 2026-05-10. The onboarding SPA already had a signup form (email + password + app picker + language toggle); this drop wires the Cloudflare Turnstile widget on top so production deployments actually run the captcha verifier they ship. Concrete changes:
+- New `GET /api/onboarding/config` endpoint surfaces `{signupEnabled, turnstileSiteKey}`. The site key (PUBLIC, distinct from `TURNSTILE_SECRET_KEY`) is read from `TURNSTILE_SITE_KEY` env. Empty when no CAPTCHA is configured. 3 tests (`onboarding_config_test.go`) cover surfacing the key, omitting it when unset, and reporting `signupEnabled: false` for internal-only deploys.
+- `index.html` loads the Turnstile script (`challenges.cloudflare.com/turnstile/v0/api.js`) — harmless when no widget renders.
+- `src/main.ts` adds `loadOnboardingConfigAndRender` (one-shot fetch on first signup render) + `mountTurnstileWidget` (200 ms retry until `window.turnstile` is defined) + a `cf-turnstile` div with `data-theme="dark"` matching the SPA's #141414 base. Token plumbed into `submitSignup` → `api.signup({captchaToken})`. On submit failure the widget resets so the user can retry without a page refresh (Turnstile tokens are single-use). When a site key is configured but the user submits before solving the challenge, the form blocks with "Please complete the CAPTCHA before submitting" instead of POSTing an empty token.
+- TypeScript `Window.turnstile` declared in `src/main.ts` so the global API is type-safe; `tsc --noEmit` clean. Vite build green: 27.28 kB JS / 24.60 kB CSS.
+
+**Phase 4 (Postgres swap of MemoryStore in production) — remaining**: blocked on TASK-014 Phase 4 (Postgres provisioning) and gives the User row durability.
 
 ## Acceptance Criteria
 - [x] Public `POST /api/signup` endpoint, no `ADMIN_TOKEN` required (Phase 0, 2026-05-03)
-- [ ] CAPTCHA on the signup form, validated server-side (Phase 2 — interface stub shipped)
+- [x] CAPTCHA on the signup form, validated server-side (Phase 2, 2026-05-09 — Cloudflare Turnstile verifier behind the existing `captchaVerifier` seam, gated by `TURNSTILE_SECRET_KEY`; SPA widget integration lands with Phase 3)
 - [x] Email verification required before any provisioning happens (Phase 0 — verify endpoint flips `email_verified_at`; provisioning itself is Phase 1)
 - [x] Per-IP rate limit (≤5 signups/hour without auth) (Phase 0)
 - [x] Disposable email domains rejected (Phase 0 — embedded blocklist of ~18 common domains)

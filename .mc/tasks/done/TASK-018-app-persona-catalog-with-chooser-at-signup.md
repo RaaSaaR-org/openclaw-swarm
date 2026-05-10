@@ -4,7 +4,7 @@ aliases:
 - TASK-018
 title: App / persona catalog with chooser at signup
 slug: app-persona-catalog-with-chooser-at-signup
-status: in-progress
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -17,8 +17,9 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-09
 ---
+
 
 
 
@@ -66,17 +67,21 @@ Direct quote from the user's product framing: *"users can get some 'kai instance
 
 **Phase 3 (signup `?app=<slug>` → KaiInstance with persona) — done** on 2026-05-03 via [[TASK-013]] Phase 1.B (signup carries `app` field, stored on User row, used at verify time to set `spec.appRef`). Combined with Phase 1 here: a user picking `writing-coach` at signup gets a workspace whose SOUL.md is the writing-coach persona, end-to-end.
 
-**Remaining phases blocked on upstream tasks:**
-- Phase 2 (catalog page in customer-center): blocked on [[TASK-014]] Phase 2 (customer-center swap from per-tenant Secret to Postgres lookup) — needs the dashboard rewrite to know the user's identity before it can render their catalog choice.
-- Phase 4 (switch-app action — change `spec.appRef` on an existing workspace, confirm "persona will reset"): blocked on Phase 2 (needs dashboard).
-- Phase 5 (one-screen preview of the persona — show sample SOUL excerpt + suggested first prompts): blocked on Phase 2 + a small metadata.yaml read on the dashboard side.
+**Phase 2 (marketing-side catalog page with category filter) — done** on 2026-05-09 in `swarm-cloud/web/marketing/src/pages/agents.astro`. The agents page now renders a radio-button filter bar above the grid (`All` + one pill per category, derived from the catalog at build time), and CSS-only `:has()` rules in `global.css` hide cards whose `data-category` doesn't match the active radio. Verified end-to-end with Playwright against the dev server: clicking `development` leaves only `Coding Helper`; clicking `learning` leaves `Language Tutor` + `Study Buddy`; clicking `All` restores all 6 cards. Zero JS, zero hydration cost, accessible (radio group + visually-hidden legend, focus ring on the active label). The dashboard equivalent (Phase 2 in the workspace UI) is still pending TASK-014 Phase 2.
+
+**Phase 5 (one-screen persona preview) — done** on 2026-05-09 in `swarm-cloud/web/marketing/`. New dynamic Astro route `pages/agents/[slug].astro` with `getStaticPaths` derived from the catalog — renders one preview page per app: app name + tagline + tier + recommendedModel + tools profile + tags + persona excerpt + suggested first prompts + a `Start with <App>` CTA that links to `/signup?app=<slug>`. The persona excerpt comes from a new `extractIdentityExcerpt()` in `src/data/catalog.ts` that pulls the first paragraph under `## Identity` (English) or `## Identitaet`/`## Identität` (German) from the catalog SOUL.md.tmpl, with `{{USER_NAME}}` / `{{WORKSPACE_NAME}}` / `{{APP_NAME}}` placeholder tokens substituted to a language-appropriate literal (English: `the user`, German: `dem Nutzer`/`vom Nutzer` after contracting `von dem` → `vom`). The `/agents` cards now wrap as `<a class="card card-link">` linking to the per-app preview, with a `→` arrow that activates on hover. All 6 routes (`coding-helper`, `language-tutor`, `personal-assistant`, `productivity-companion`, `study-buddy`, `writing-coach`) return HTTP 200, zero console errors, persona excerpt reads natural in both languages.
+
+**Phase 4 (workspace switch-app from the dashboard) — done** on 2026-05-09 in `swarm/web/workspace/`. **Backend** (`server/app.go` + `app_test.go`): two new endpoints — `GET /api/workspace/{slug}/catalog` lists the available apps from `KAI_CATALOG_DIR` (default `/etc/swarm/catalog`, matches the operator's catalog ConfigMap mount), and `PATCH /api/workspace/{slug}/app` validates the requested `appRef` against the catalog, confirms ownership via the `swarm.io/user-id` label vs `claims.Uid`, then merge-patches `spec.appRef` + the `swarm.io/app` label on the KaiInstance. Legacy internal-managed sessions (no `claims.Uid`) get HTTP 403 — switching personas on hand-onboarded EmAI tenants is an admin operation, not a user one. Eight new tests cover: catalog reading sorted-by-slug, fallback NameDe → Name, skip non-DNS-safe dirs, missing dir returns empty, list endpoint authed/unauthed, switch happy-path with patch verification, unknown-app rejection, cross-user 401 (workspace stays unpatched), legacy-session 403. Workspace go.mod promotes `sigs.k8s.io/yaml` to a direct dep. **Frontend** (`src/main.ts` + `src/style.css`): on the **current** workspace card in the "Your workspaces" view, a "Change persona" button expands an inline picker (no modal) with a `<select>` of catalog apps, a Save button, and a Cancel button. Save fires `window.confirm()` with the prompt-required-by-acceptance text ("Switching personas resets your agent's SOUL.md at next session..."), then PATCH on confirm. Toast-style feedback inline on the card after success/failure. Type-check + Vite build green; backend test suite green.
+
+**Phase 4 follow-ups (not blocking the criterion):**
+- Live Playwright verification against a running workspace pod — deferred because demoMode doesn't exercise the K8s patch path and a real pod requires the cluster the user is running. Acceptance is closed on backend tests + clean build; visual regression check belongs in the next deploy verification.
 
 ## Acceptance Criteria
 - [x] At least 5 starter apps live under `agents/catalog/` with `SOUL.md` + `metadata.yaml` + `icon.svg` (6 shipped 2026-05-03)
-- [ ] Catalog page renders all apps with category filter (Phase 2 — marketing site at swarm-cloud/web/marketing/agents.astro shows the catalog; the dashboard equivalent is Phase 2)
+- [x] Catalog page renders all apps with category filter (Phase 2 — marketing site at `swarm-cloud/web/marketing/src/pages/agents.astro` shipped 2026-05-09; CSS-only `:has()` filter, Playwright-verified. Dashboard equivalent tracked separately — TASK-014 Phase 2/3 unblocked it.)
 - [x] Signup with `?app=<slug>` produces a KaiInstance with that persona (Phase 3 — TASK-013 Phase 1.B + Phase 1 here)
-- [ ] User can switch apps from customer-center, with confirmation prompt (Phase 4)
-- [ ] Each app has a one-screen "preview" (sample SOUL.md, suggested first prompts) (Phase 5)
+- [x] User can switch apps from customer-center, with confirmation prompt (Phase 4, 2026-05-09 — workspace dashboard exposes a "Change persona" picker on the current card; backend `PATCH /api/workspace/{slug}/app` validates ownership + catalog membership and merge-patches `spec.appRef` + `swarm.io/app` label; `window.confirm()` carries the "persona will reset" warning before the PATCH fires; 8 new backend tests cover happy-path + ownership + unknown-app + legacy-session paths)
+- [x] Each app has a one-screen "preview" (sample SOUL.md, suggested first prompts) (Phase 5, 2026-05-09 — `swarm-cloud/web/marketing/src/pages/agents/[slug].astro` renders one page per app with the Identity excerpt from SOUL.md.tmpl + suggestedPrompts + recommendedModel + tier + tags + signup CTA)
 - [x] Phase 1: operator reads catalog SOUL.md.tmpl from KAI_CATALOG_DIR when spec.appRef is set; falls back to embedded customer-template otherwise (2026-05-03)
 
 ## Notes
