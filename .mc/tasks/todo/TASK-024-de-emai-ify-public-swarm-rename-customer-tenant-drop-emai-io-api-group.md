@@ -100,7 +100,9 @@ Annotation rename in the same drop: the workspace dashboard's per-tenant extra-l
 - All admin-console server tests + tsc + vite build green.
 
 **Remaining phases:**
-- Phase 3 (`swarm-emai` / `swarm-config` mass rewrite): private-repo work, unblocked since Phase 2 landed — overlays can start using `tenantName`/`tenantSlug` whenever they're ready. Optional in the short term: v1alpha1 manifests still apply via the conversion webhook.
+- Phase 3 (`swarm-emai` / `swarm-config` mass rewrite) — **partial, 2026-05-10**:
+  - **Done**: scripts switched from `emai.io/customer=<slug>` to `swarm.io/tenant=<slug>` (`scripts/onboard.sh` 3 sites, `scripts/swarm-sync.sh` 1 site). Verified live on emai-cloud — both labels resolve to the same pod (operator's additive label has been rendering since Phase 1.A).
+  - **Blocked**: KaiInstance manifest rename (`environments/cloud/kai-*.yaml`: `customerName/customerSlug` → `tenantName/tenantSlug`). Dry-run against emai-cloud fails with `unknown field "spec.tenantName"` — the CRD on emai-cloud is still on the original v1alpha1 schema (no tenant fields) since the public swarm Phase 2 additive fields + Phase 5 conversion webhook haven't been deployed to that cluster yet. Flip the manifests as part of the next operator upgrade window on emai-cloud.
 - Group rename `swarm.emai.io` → `swarm.io`: deferred to a follow-up release. Option B end-state. Requires re-applying every CR in `swarm-emai` under the new group + a one-cycle dual-CRD bridge. Belongs in its own task with a planned deploy window.
 
 ## Acceptance Criteria
