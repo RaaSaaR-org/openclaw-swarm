@@ -1,64 +1,68 @@
 ---
 name: mission_control
-description: MissionControl (mc) CLI for project management — list, create, show, and update tasks, research, and sprints.
+description: MissionControl (mc) project-management skill — list, create, show, and update tasks, research, and sprints via the central MC API.
 metadata: {"openclaw": {"always": true}}
 ---
 
-# MissionControl (mc) CLI
+# MissionControl (mc) skill
 
-The `mc` binary is in your workspace. **Always use `-y` flag and run from the workspace directory.**
+mc is a remote service. Use the `mc-client` wrapper, which translates familiar
+CLI shapes into HTTPS calls against the central MC API. The wrapper reads
+`MC_API_BASE`, `MC_API_TOKEN`, and `MC_CUSTOMER_ID` from your environment —
+they're already set by the operator. **Always run from the workspace
+directory.**
 
-## How to Run
+## How to run
 
 ```bash
-cd /home/node/.openclaw/workspace && ./mc -y <command>
+cd /home/node/.openclaw/workspace && ./mc-client <command> [args…]
 ```
 
-The `-y` flag skips interactive confirmations (required in non-TTY environments).
+## Common commands
 
-## Common Commands
-
-### Project Overview
+### Project overview
 ```bash
-./mc -y status                              # Dashboard: entity counts, recent activity
+./mc-client status                              # Counts + recent activity
 ```
 
 ### Tasks
 ```bash
-./mc -y list tasks                          # All tasks
-./mc -y list tasks --status todo            # Filter by status (backlog, todo, in-progress, review, done)
-./mc -y show TASK-001                       # Show task details
+./mc-client list tasks                          # All your tasks (auto-scoped)
+./mc-client list tasks --status todo            # Filter by status
+./mc-client show TASK-001                       # Show task details
 
-./mc -y new task "Task title"               # Create a new task
-./mc -y new task "Title" --status todo --priority 2  # With options
-./mc -y move TASK-001 --status in-progress  # Update task status
-./mc -y move TASK-001 --status done         # Mark task as done
+./mc-client new task "Task title"               # Create a new task
+./mc-client new task "Title" --priority 2       # With priority
+./mc-client move TASK-001 --status in-progress  # Update status
+./mc-client move TASK-001 --status done         # Mark as done
 ```
 
 ### Research
 ```bash
-./mc -y list research                       # All research topics
-./mc -y new research "Topic"                # Create research topic
-./mc -y show RES-001                        # Show research details
+./mc-client list research
+./mc-client show RES-001
 ```
 
 ### Sprints
 ```bash
-./mc -y list sprints                        # All sprints
-./mc -y show SPR-001                        # Show sprint details
-```
-
-### Maintenance
-```bash
-./mc -y index                               # Rebuild indexes after manual file edits
-./mc -y validate                            # Check repository structure
+./mc-client list sprints
+./mc-client show SPR-001
 ```
 
 ## Rules
 
-1. **Always use `-y`**: Every mc command must include `-y` to skip confirmations. Without it, create commands will be cancelled.
-2. **Always `cd` first**: Run `cd /home/node/.openclaw/workspace && ./mc -y <command>`.
-3. **Use Entity IDs**: Always reference entities by their ID (TASK-001, RES-001, SPR-001) in responses.
-4. **Report results**: After creating or updating an entity, confirm the action with the entity ID and title.
-5. **Proactive monitoring**: When asked about project status, use `./mc -y status` first, then drill into specifics.
-6. **No web search needed**: All project data is local. Do NOT use web_search for project information.
+1. **Tasks you create are auto-scoped to your customer.** Do not pass any
+   `--customer` flag — the wrapper injects `MC_CUSTOMER_ID` for you, and the
+   gateway rejects mismatching values.
+2. **Cross-tenant access returns `404`.** That's expected, not a bug — if you
+   try to read another customer's TASK-001, you'll get "no such entity".
+3. **Use entity IDs in your responses.** Always reference `TASK-001`,
+   `RES-001`, etc. in messages back to the user.
+4. **`-y` is accepted for back-compat but is a no-op.** The API has no
+   interactive prompts; the wrapper still accepts the flag so old habits
+   work.
+5. **Failures print to stderr and exit 0.** Look for `mc-client: HTTP 4xx`
+   in the output and react accordingly (most often a 400 from a body the
+   gateway rejected).
+6. **No web search needed.** All project data is local to the central MC API
+   instance.

@@ -77,6 +77,9 @@ jobs:
           - app: status-page
             context: .
             dockerfile: web/status-page/Dockerfile
+          - app: mc-gateway
+            context: .
+            dockerfile: web/mc-gateway/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

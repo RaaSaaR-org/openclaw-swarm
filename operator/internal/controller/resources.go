@@ -126,6 +126,7 @@ func buildConfigMap(kai *swarmv1alpha2.KaiInstance, slug string, tmpl *renderedT
 			"HEARTBEAT.md":  tmpl.HeartbeatMD,
 			"openclaw.json": tmpl.OpenClawJSON,
 			"SKILL-mc.md":   tmpl.SkillMC,
+			"mc-client.sh":  tmpl.McClientSh,
 		},
 	}
 }
@@ -158,7 +159,21 @@ type deploymentOpts struct {
 	// `kai-<slug>-openrouter` Secret with a single shared Secret in the same
 	// namespace. Empty preserves the legacy per-tenant wiring.
 	PooledOpenRouterSecret string
+	// MCAPIBaseURL is the cluster-internal URL of the mc-gateway service.
+	// Injected as `MC_API_BASE` env on Kai pods that have opted into the
+	// API via the `mc.swarm.emai.io/api-enabled=true` annotation. Empty means
+	// the operator's deployment hasn't configured one — annotation-tagged
+	// pods will still get an empty MC_API_BASE and fail at runtime, which
+	// is the correct loud failure for a misconfigured operator.
+	MCAPIBaseURL string
 }
+
+// Annotation keys that gate MC API wiring. See buildDeployment for how they're
+// consumed.
+const (
+	annotationMCAPIEnabled = "mc.swarm.emai.io/api-enabled"
+	annotationMCCustomerID = "mc.swarm.emai.io/customer-id"
+)
 
 // providerEnvVars renders the LLM-provider env block for the agent
 // container (TASK-027). Behavior:
@@ -263,6 +278,35 @@ func buildDeployment(kai *swarmv1alpha2.KaiInstance, slug, hash string, opts dep
 		})
 	}
 
+	// MC API wiring — opt-in per tenant via annotations so the rollout can be
+	// staged and existing pods are not destabilised. Both annotations must be
+	// set for the env vars to inject (no half-configured pod).
+	//
+	//   mc.swarm.emai.io/api-enabled: "true"
+	//   mc.swarm.emai.io/customer-id: "CUST-NNN"
+	//
+	// The token comes from a convention-named Secret `kai-<slug>-mc-api`
+	// (key `token`) created by the cluster overlay's onboarding script before
+	// the annotations land. Until the annotations are added, the pod runs as
+	// before — local mc binary + swarm-sync.
+	if kai.Annotations[annotationMCAPIEnabled] == "true" {
+		if customerID := kai.Annotations[annotationMCCustomerID]; customerID != "" {
+			env = append(env,
+				corev1.EnvVar{Name: "MC_API_BASE", Value: opts.MCAPIBaseURL},
+				corev1.EnvVar{Name: "MC_CUSTOMER_ID", Value: customerID},
+				corev1.EnvVar{
+					Name: "MC_API_TOKEN",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: childName(slug) + "-mc-api"},
+							Key:                  "token",
+						},
+					},
+				},
+			)
+		}
+	}
+
 	// Resource requirements. Two paths:
 	//   - SaaS-enrolled tenants (spec.tier set, not managed: internal):
 	//     pkg/quotas clamps spec.resources to the tier ceiling and supplies
@@ -305,6 +349,10 @@ mkdir -p /state/workspace /state/workspace/skills/mc /state/workspace/memory
 [ -f /state/workspace/TOOLS.md ] || cp /identity/TOOLS.md /state/workspace/TOOLS.md
 [ -f /state/workspace/HEARTBEAT.md ] || cp /identity/HEARTBEAT.md /state/workspace/HEARTBEAT.md
 cp /identity/SKILL-mc.md /state/workspace/skills/mc/SKILL.md
+# mc-client wrapper: refresh on every boot so a fix to the wrapper rolls out
+# with the next pod restart. Marked +x so it's runnable from the agent's PATH.
+cp /identity/mc-client.sh /state/workspace/mc-client.sh
+chmod +x /state/workspace/mc-client.sh
 applied=""
 [ -f /state/.config-hash ] && applied=$(cat /state/.config-hash)
 if [ "$applied" != "$EXPECTED_HASH" ] || [ ! -f /state/openclaw.json ]; then

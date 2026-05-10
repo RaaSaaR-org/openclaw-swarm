@@ -75,6 +75,7 @@ type renderedTemplates struct {
 	HeartbeatMD  string
 	OpenClawJSON string
 	SkillMC      string
+	McClientSh   string
 }
 
 // templateOpts carries reconciler-level config that affects template
@@ -127,6 +128,13 @@ func renderAllTemplates(vars templateVars, opts templateOpts) (*renderedTemplate
 	if err != nil {
 		return nil, fmt.Errorf("reading SKILL-mc.md: %w", err)
 	}
+	// mc-client.sh — thin shell wrapper Kai uses to call the MC REST API.
+	// Static, no placeholders; the wrapper reads MC_API_BASE / MC_API_TOKEN /
+	// MC_CUSTOMER_ID from env at runtime.
+	mcClient, err := templateFS.ReadFile("templates/mc-client.sh")
+	if err != nil {
+		return nil, fmt.Errorf("reading mc-client.sh: %w", err)
+	}
 	return &renderedTemplates{
 		SoulMD:       soul,
 		AgentsMD:     agents,
@@ -134,6 +142,7 @@ func renderAllTemplates(vars templateVars, opts templateOpts) (*renderedTemplate
 		HeartbeatMD:  heartbeat,
 		OpenClawJSON: config,
 		SkillMC:      string(skillMC),
+		McClientSh:   string(mcClient),
 	}, nil
 }
 

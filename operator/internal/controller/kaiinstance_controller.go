@@ -66,6 +66,15 @@ type KaiInstanceReconciler struct {
 	// (existing tenants stay on path-based; SaaS-direction overlays opt
 	// in). TASK-017 Phase 1.
 	PerSlugSubdomain bool
+
+	// MCAPIBaseURL is the cluster-internal URL of the mc-gateway service.
+	// Pods opted into the API via the `mc.swarm.emai.io/api-enabled=true`
+	// annotation receive it as `MC_API_BASE`. Empty means the cluster
+	// hasn't deployed the gateway yet — annotation-tagged pods will then
+	// crash with a clear "MC_API_BASE empty" error from mc-client.sh, which
+	// is the right signal for a misconfigured rollout. Set via env var
+	// SWARM_MC_API_BASE.
+	MCAPIBaseURL string
 }
 
 // +kubebuilder:rbac:groups=swarm.emai.io,resources=kaiinstances,verbs=get;list;watch;create;update;patch;delete
@@ -297,7 +306,10 @@ func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1al
 
 // reconcileDeployment creates or updates the agent Deployment.
 func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug, hash string) error {
-	desired := buildDeployment(kai, slug, hash, deploymentOpts{PooledOpenRouterSecret: r.PooledOpenRouterSecret})
+	desired := buildDeployment(kai, slug, hash, deploymentOpts{
+		PooledOpenRouterSecret: r.PooledOpenRouterSecret,
+		MCAPIBaseURL:           r.MCAPIBaseURL,
+	})
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
 	}

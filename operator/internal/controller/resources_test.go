@@ -246,6 +246,83 @@ func TestBuildDeploymentTelegram(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentMCAPI_Disabled_NoEnvInjected(t *testing.T) {
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	// No annotations → no MC_API env vars.
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{
+		MCAPIBaseURL: "http://mc-gateway.emai-swarm.svc:8080",
+	})
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		switch env.Name {
+		case "MC_API_BASE", "MC_API_TOKEN", "MC_CUSTOMER_ID":
+			t.Errorf("%s should not be injected when annotation is unset", env.Name)
+		}
+	}
+}
+
+func TestBuildDeploymentMCAPI_Enabled_InjectsEnv(t *testing.T) {
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	kai.Annotations = map[string]string{
+		annotationMCAPIEnabled: "true",
+		annotationMCCustomerID: "CUST-001",
+	}
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{
+		MCAPIBaseURL: "http://mc-gateway.emai-swarm.svc:8080",
+	})
+	got := map[string]string{}
+	gotRef := map[string]string{}
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+			gotRef[env.Name] = env.ValueFrom.SecretKeyRef.Name + "/" + env.ValueFrom.SecretKeyRef.Key
+		} else {
+			got[env.Name] = env.Value
+		}
+	}
+	if got["MC_API_BASE"] != "http://mc-gateway.emai-swarm.svc:8080" {
+		t.Errorf("MC_API_BASE = %q, want operator-supplied URL", got["MC_API_BASE"])
+	}
+	if got["MC_CUSTOMER_ID"] != "CUST-001" {
+		t.Errorf("MC_CUSTOMER_ID = %q, want CUST-001", got["MC_CUSTOMER_ID"])
+	}
+	if gotRef["MC_API_TOKEN"] != "kai-test-mc-api/token" {
+		t.Errorf("MC_API_TOKEN ref = %q, want kai-test-mc-api/token", gotRef["MC_API_TOKEN"])
+	}
+}
+
+func TestBuildDeploymentMCAPI_EnabledWithoutCustomerID_NoEnvInjected(t *testing.T) {
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	kai.Annotations = map[string]string{
+		annotationMCAPIEnabled: "true",
+		// customer-id annotation deliberately omitted
+	}
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{
+		MCAPIBaseURL: "http://mc-gateway.emai-swarm.svc:8080",
+	})
+	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+		switch env.Name {
+		case "MC_API_BASE", "MC_API_TOKEN", "MC_CUSTOMER_ID":
+			t.Errorf("%s should not be injected without customer-id annotation", env.Name)
+		}
+	}
+}
+
+func TestBuildConfigMapIncludesMCClient(t *testing.T) {
+	tmpl := &renderedTemplates{
+		SoulMD:       "# soul",
+		AgentsMD:     "# agents",
+		ToolsMD:      "# tools",
+		HeartbeatMD:  "# heartbeat",
+		OpenClawJSON: "{}",
+		SkillMC:      "# skill",
+		McClientSh:   "#!/usr/bin/env bash\necho stub\n",
+	}
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	cm := buildConfigMap(kai, "test", tmpl)
+	if got := cm.Data["mc-client.sh"]; got != tmpl.McClientSh {
+		t.Errorf("mc-client.sh missing from ConfigMap: got %q", got)
+	}
+}
+
 func TestCommonLabelsCarriesBothLegacyAndNewTenantLabel(t *testing.T) {
 	t.Parallel()
 	got := commonLabels("acme")

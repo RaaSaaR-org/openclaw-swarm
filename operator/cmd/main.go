@@ -214,6 +214,7 @@ func main() {
 		IngressDomain:          ingressDomain,
 		IngressTLSSecret:       ingressTLSSecret,
 		PooledOpenRouterSecret: os.Getenv("SWARM_POOLED_OPENROUTER_SECRET"),
+		MCAPIBaseURL:           os.Getenv("SWARM_MC_API_BASE"),
 		CatalogDir:             catalogDir,
 		PerSlugSubdomain:       perSlugIngress,
 	}).SetupWithManager(mgr); err != nil {
