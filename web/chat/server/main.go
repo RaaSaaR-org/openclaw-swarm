@@ -44,7 +44,7 @@ func main() {
 
 	s := &server{
 		namespace: namespace,
-		demoMode:  envTrue("KAI_INSECURE_DEV_AUTH"),
+		demoMode:  envTrue("SWARM_INSECURE_DEV_AUTH"),
 	}
 
 	if s.demoMode {
@@ -53,12 +53,12 @@ func main() {
 		}
 		secret := make([]byte, 32)
 		if _, err := rand.Read(secret); err != nil {
-			log.Fatalf("KAI_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
+			log.Fatalf("SWARM_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
 		}
 		s.devJWTSecret = secret
 		s.revoker = auth.NewMemoryRevoker()
 		log.Printf("============================================================")
-		log.Printf("KAI_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
+		log.Printf("SWARM_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
 		log.Printf("Login accepts any user; JWT signed with random ephemeral secret.")
 		log.Printf("Listening on loopback %s only.", addr)
 		log.Printf("============================================================")
@@ -144,10 +144,10 @@ func envTrue(k string) bool {
 func requireLoopback(addr string) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires loopback ADDR (e.g. 127.0.0.1:8080), got %q: %v", addr, err)
+		return fmt.Errorf("SWARM_INSECURE_DEV_AUTH requires loopback ADDR (e.g. 127.0.0.1:8080), got %q: %v", addr, err)
 	}
 	if host == "" {
-		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires explicit loopback host (e.g. 127.0.0.1:8080), got %q", addr)
+		return fmt.Errorf("SWARM_INSECURE_DEV_AUTH requires explicit loopback host (e.g. 127.0.0.1:8080), got %q", addr)
 	}
 	if host == "localhost" {
 		return nil
@@ -155,7 +155,7 @@ func requireLoopback(addr string) error {
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return nil
 	}
-	return fmt.Errorf("KAI_INSECURE_DEV_AUTH refuses non-loopback host %q — bind to 127.0.0.1, ::1, or localhost", host)
+	return fmt.Errorf("SWARM_INSECURE_DEV_AUTH refuses non-loopback host %q — bind to 127.0.0.1, ::1, or localhost", host)
 }
 
 // brandingHandler serves /branding/* — override from disk if BRANDING_DIR is

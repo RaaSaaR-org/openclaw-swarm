@@ -53,7 +53,7 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["/idle-suspend"]
               env:
-                - name: KAI_USERS_DSN
+                - name: SWARM_USERS_DSN
                   valueFrom:
                     secretKeyRef:
                       name: onboarding-postgres

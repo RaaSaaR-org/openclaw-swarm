@@ -57,11 +57,11 @@ var validAppSlug = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // catalogDir returns the directory the workspace pod reads catalog metadata
 // from. Defaults to `/etc/swarm/catalog` (matches the operator's
-// `KAI_CATALOG_DIR` default and the deployment-overlay ConfigMap mount). In
+// `SWARM_CATALOG_DIR` default and the deployment-overlay ConfigMap mount). In
 // dev / tests, set the env var to a working tree path like
 // `agents/catalog`.
 func (s *server) catalogDir() string {
-	if dir := os.Getenv("KAI_CATALOG_DIR"); dir != "" {
+	if dir := os.Getenv("SWARM_CATALOG_DIR"); dir != "" {
 		return dir
 	}
 	return "/etc/swarm/catalog"

@@ -31,7 +31,7 @@ u, err := s.Create(ctx, users.CreateParams{
 
 | Module | Use when | Deps |
 |---|---|---|
-| `pkg/users.NewMemoryStore()` | Tests, `KAI_INSECURE_DEV_AUTH` | None — pure stdlib |
+| `pkg/users.NewMemoryStore()` | Tests, `SWARM_INSECURE_DEV_AUTH` | None — pure stdlib |
 | `pkg/userspg.New(pgxpool)` | Production | `github.com/jackc/pgx/v5` |
 
 `pkg/users` carries zero external deps so callers that only need types or

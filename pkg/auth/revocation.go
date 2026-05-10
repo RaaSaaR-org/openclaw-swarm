@@ -23,7 +23,7 @@ type Revoker interface {
 }
 
 // MemoryRevoker is the in-memory implementation used in tests and in the
-// `KAI_INSECURE_DEV_AUTH` path where no K8s Secret exists. Safe for concurrent
+// `SWARM_INSECURE_DEV_AUTH` path where no K8s Secret exists. Safe for concurrent
 // use; entries are pruned on every read.
 type MemoryRevoker struct {
 	mu      sync.Mutex

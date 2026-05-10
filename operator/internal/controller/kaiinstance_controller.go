@@ -54,7 +54,7 @@ type KaiInstanceReconciler struct {
 	// overlay; in dev, the operator binary's parent directory's `agents/catalog`
 	// path). Empty disables the catalog renderer — every workspace falls back
 	// to the embedded customer-template, regardless of `spec.appRef`. Set via
-	// env var KAI_CATALOG_DIR; default `/etc/swarm/catalog` (TASK-018 Phase 1).
+	// env var SWARM_CATALOG_DIR; default `/etc/swarm/catalog` (TASK-018 Phase 1).
 	CatalogDir string
 
 	// PerSlugSubdomain, when true, makes the operator render per-tenant
@@ -62,7 +62,7 @@ type KaiInstanceReconciler struct {
 	// the legacy shared `<IngressDomain>` host + `/ws/<slug>` path. Wildcard
 	// cert + wildcard DNS from TASK-017 Phase 0 cover the new shape. The
 	// flip changes the URL contract for every existing tenant — opt-in via
-	// env var KAI_PER_SLUG_INGRESS so deploys can roll out safely
+	// env var SWARM_PER_SLUG_INGRESS so deploys can roll out safely
 	// (existing tenants stay on path-based; SaaS-direction overlays opt
 	// in). TASK-017 Phase 1.
 	PerSlugSubdomain bool

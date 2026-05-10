@@ -11,7 +11,7 @@ import (
 	"github.com/emai-ai/swarm/pkg/userspg"
 )
 
-// newPoolStore opens a Postgres pool from `KAI_USERS_DSN`, runs the
+// newPoolStore opens a Postgres pool from `SWARM_USERS_DSN`, runs the
 // userspg schema migration (idempotent — onboarding owns the canonical
 // migration call but running again is safe), and returns the resulting
 // PoolStore as the `users.Store` the workspace dashboard reads from.

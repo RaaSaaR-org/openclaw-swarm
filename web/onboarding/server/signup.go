@@ -31,7 +31,7 @@ import (
 // in main.go from environment variables; passed into the server struct so
 // handlers don't reach into globals.
 type signupConfig struct {
-	Enabled       bool          // KAI_SIGNUP_ENABLED — defaults off so existing internal-tenant deploys aren't accidentally opened to the public
+	Enabled       bool          // SWARM_SIGNUP_ENABLED — defaults off so existing internal-tenant deploys aren't accidentally opened to the public
 	Secret        []byte        // HMAC key for verification tokens; rotated by changing the env var
 	VerifyBaseURL string        // base URL embedded in the verification email; e.g. https://kai.example.org/onboarding
 	VerifyTTL     time.Duration // how long a verification link stays valid
@@ -55,7 +55,7 @@ type captchaVerifier interface {
 // noopCaptcha accepts any token. Used when no provider is configured —
 // every call site passes some string but the server never hits a real API.
 // Tests use this; production deployments are expected to set a real
-// captchaVerifier when KAI_CAPTCHA_PROVIDER lands (Phase 2).
+// captchaVerifier when SWARM_CAPTCHA_PROVIDER lands (Phase 2).
 type noopCaptcha struct{}
 
 func (noopCaptcha) Verify(_ context.Context, _, _ string) error { return nil }
@@ -96,7 +96,7 @@ func (s *server) handleOnboardingConfig(w http.ResponseWriter, _ *http.Request) 
 }
 
 // handleSignup is the public POST /api/signup endpoint. Steps:
-//  1. Feature flag check (KAI_SIGNUP_ENABLED).
+//  1. Feature flag check (SWARM_SIGNUP_ENABLED).
 //  2. Rate-limit by client IP.
 //  3. Decode + validate body (email parses, not disposable, password ≥ 8).
 //  4. CAPTCHA verify.
@@ -463,7 +463,7 @@ func (s *server) checkVerifyToken(userID, token string, now time.Time) error {
 }
 
 // workspaceURLFor returns the URL the welcome email links to. The base URL
-// follows the `KAI_VERIFY_BASE_URL` host (the verify-email base) so the
+// follows the `SWARM_VERIFY_BASE_URL` host (the verify-email base) so the
 // onboarding pod doesn't need to learn the dashboard's separate hostname —
 // in production both share `kai.<domain>`. Empty config falls back to the
 // in-pod relative path; the user's email client will render that as a

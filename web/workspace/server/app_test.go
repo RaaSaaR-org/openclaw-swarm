@@ -131,7 +131,7 @@ tier: free
 shortDescription: Day-to-day helper.
 `,
 	})
-	t.Setenv("KAI_CATALOG_DIR", dir)
+	t.Setenv("SWARM_CATALOG_DIR", dir)
 
 	const userID = "u_alice"
 	f := newFixtureWithKaiObjects(t, "primary", userID, []*unstructured.Unstructured{
@@ -179,7 +179,7 @@ toolsProfile: messaging
 tier: free
 `,
 	})
-	t.Setenv("KAI_CATALOG_DIR", dir)
+	t.Setenv("SWARM_CATALOG_DIR", dir)
 
 	const userID = "u_alice"
 	f := newFixtureWithKaiObjects(t, "primary", userID, []*unstructured.Unstructured{
@@ -226,7 +226,7 @@ toolsProfile: messaging
 tier: free
 `,
 	})
-	t.Setenv("KAI_CATALOG_DIR", dir)
+	t.Setenv("SWARM_CATALOG_DIR", dir)
 
 	const userID = "u_alice"
 	f := newFixtureWithKaiObjects(t, "primary", userID, []*unstructured.Unstructured{
@@ -248,7 +248,7 @@ func TestHandleSwitchApp_RejectsCrossUserOwnership(t *testing.T) {
 	dir := writeCatalogFixture(t, map[string]string{
 		"writing-coach": "name: Writing Coach\ncategory: creative\ntoolsProfile: messaging\ntier: free\n",
 	})
-	t.Setenv("KAI_CATALOG_DIR", dir)
+	t.Setenv("SWARM_CATALOG_DIR", dir)
 
 	// Workspace is owned by u_bob; the request comes from u_alice. Must 401.
 	const owner = "u_bob"
@@ -281,7 +281,7 @@ func TestHandleSwitchApp_RejectsLegacyInternalSession(t *testing.T) {
 	dir := writeCatalogFixture(t, map[string]string{
 		"writing-coach": "name: Writing Coach\ncategory: creative\ntoolsProfile: messaging\ntier: free\n",
 	})
-	t.Setenv("KAI_CATALOG_DIR", dir)
+	t.Setenv("SWARM_CATALOG_DIR", dir)
 
 	// Internal-managed binding → JWT has no Uid → switch-app must refuse.
 	f := newFixtureWithBinding(t, "legacy", nil, "internal", "")

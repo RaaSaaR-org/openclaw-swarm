@@ -11,7 +11,7 @@ import (
 	"github.com/emai-ai/swarm/pkg/userspg"
 )
 
-// newPoolStore opens a Postgres pool from `KAI_USERS_DSN`, runs the
+// newPoolStore opens a Postgres pool from `SWARM_USERS_DSN`, runs the
 // userspg schema migration (idempotent), and returns the resulting
 // PoolStore as the `users.Store` the rest of the binary uses.
 //
@@ -21,7 +21,7 @@ import (
 // pgx-free. We pull pgx into the public binary to make development
 // against k3d straightforward — onboarding + workspace can share the
 // same Postgres without an overlay-side fork. Deployments that don't
-// want Postgres simply leave `KAI_USERS_DSN` unset; the runtime cost
+// want Postgres simply leave `SWARM_USERS_DSN` unset; the runtime cost
 // of the unused pgx code paths is the only price.
 func newPoolStore(dsn string) (users.Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

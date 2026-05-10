@@ -63,15 +63,15 @@ build: build-operator build-chat ## Build all images
 
 .PHONY: build-operator
 build-operator: ## Build operator image (native platform)
-	cd operator && docker build -t swarm-operator:latest .
+	docker build -t swarm-operator:latest -f operator/Dockerfile .
 
 .PHONY: build-operator-arm64
 build-operator-arm64: ## Build operator image for ARM64 (cloud deployment)
-	cd operator && docker build --platform linux/arm64 -t swarm-operator:latest .
+	docker build --platform linux/arm64 -t swarm-operator:latest -f operator/Dockerfile .
 
 .PHONY: build-chat
 build-chat: ## Build customer chat image
-	cd web/chat && docker build -t emai-chat:latest .
+	docker build -t swarm-chat:latest -f web/chat/Dockerfile .
 
 .PHONY: build-installer
 build-installer: ## Generate operator install manifest (dist/install.yaml)

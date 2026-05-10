@@ -17,7 +17,7 @@ The dashboard is split into pages, navigable from the sticky left sidebar:
 - **Overview** — greeting + four stat cards (Status, Briefings count + unread, Project team size, Chat-access user count), the latest "What's new" briefing teaser, side-by-side "What Kai does for you" / "Recurring rhythms" cards distilled from `SOUL.md` and `HEARTBEAT.md`, and a "Quick actions" panel.
 - **Briefings** — collapsible cards with mark-as-read state (per-browser `localStorage`), search when ≥ 5 briefings, "Mark all as read", deep-links via `…#/briefings/<id>`, and relative times. Markdown body rendered with `marked` (default escaping; no inline HTML honored).
 - **Project team** — contact cards (name, role, company, timezone, email, phone). Distilled from `customers/<slug>/USER.md` into a JSON file the operator publishes to a ConfigMap.
-- **Apps & channels** — built-in tiles for `Chat with Kai` and `Status`, plus any number of custom external tiles via the `swarm.emai.io/customer-links` annotation on the `KaiInstance`. Channels list includes web chat, plus Telegram if `spec.telegram` is set.
+- **Apps & channels** — built-in tiles for `Chat with Mind Swarm` and `Status`, plus any number of custom external tiles via the `swarm.emai.io/customer-links` annotation on the `KaiInstance`. Channels list includes web chat, plus Telegram if `spec.telegram` is set.
 - **Team access** — admin panel that manages the `kai-<slug>-users` Secret. Add an email + initial password, generate a strong password, reset, or remove a user. Argon2id hashing happens server-side.
 
 The sidebar shows the customer card (avatar/name/project/status pill), the unread-briefings badge, the signed-in user's email, and a logout button.

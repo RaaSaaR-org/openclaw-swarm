@@ -135,34 +135,34 @@ func main() {
 }
 
 // setupSignup wires the optional public-signup flow (TASK-013). Defaults are
-// dev-friendly: when KAI_SIGNUP_ENABLED=1 but no real users/email/secret env
+// dev-friendly: when SWARM_SIGNUP_ENABLED=1 but no real users/email/secret env
 // vars are set, the flow uses an in-memory user store + a disk email sender +
-// an ephemeral HMAC secret. Production deployments must set KAI_SIGNUP_SECRET
-// (so verification links survive restarts) and either KAI_USERS_DSN +
+// an ephemeral HMAC secret. Production deployments must set SWARM_SIGNUP_SECRET
+// (so verification links survive restarts) and either SWARM_USERS_DSN +
 // RESEND_API_KEY or roll their own Sender/Store via a fork.
 func (s *server) setupSignup() error {
-	enabled := envTrue("KAI_SIGNUP_ENABLED")
+	enabled := envTrue("SWARM_SIGNUP_ENABLED")
 	s.signup.Enabled = enabled
 	if !enabled {
 		return nil
 	}
 
 	// Users store: MemoryStore by default; opt in to Postgres-backed PoolStore
-	// by setting `KAI_USERS_DSN`. The shared store is what lets onboarding
+	// by setting `SWARM_USERS_DSN`. The shared store is what lets onboarding
 	// (signup) and workspace (login + dashboard) see the same user — both
 	// services point at the same database in production. The public binary
 	// pulls pgx as a hard dep; deployments that want pure-memory ignore the
 	// env var.
-	if dsn := os.Getenv("KAI_USERS_DSN"); dsn != "" {
+	if dsn := os.Getenv("SWARM_USERS_DSN"); dsn != "" {
 		store, err := newPoolStore(dsn)
 		if err != nil {
 			return fmt.Errorf("postgres user store: %w", err)
 		}
 		s.users = store
-		log.Printf("signup: using Postgres user store (KAI_USERS_DSN set)")
+		log.Printf("signup: using Postgres user store (SWARM_USERS_DSN set)")
 	} else {
 		s.users = users.NewMemoryStore()
-		log.Printf("signup: using in-memory user store (set KAI_USERS_DSN to use Postgres)")
+		log.Printf("signup: using in-memory user store (set SWARM_USERS_DSN to use Postgres)")
 	}
 
 	// Email sender: DiskSender by default; switch to Resend by setting
@@ -178,7 +178,7 @@ func (s *server) setupSignup() error {
 
 	// HMAC secret: env var preferred (verification links survive restart);
 	// random fallback for dev so a forgotten env var doesn't fail startup.
-	if hex := os.Getenv("KAI_SIGNUP_SECRET"); hex != "" {
+	if hex := os.Getenv("SWARM_SIGNUP_SECRET"); hex != "" {
 		s.signup.Secret = []byte(hex)
 	} else {
 		secret, err := newSignupSecret()
@@ -186,10 +186,10 @@ func (s *server) setupSignup() error {
 			return fmt.Errorf("signup secret: %w", err)
 		}
 		s.signup.Secret = secret
-		log.Printf("signup: using ephemeral HMAC secret — set KAI_SIGNUP_SECRET in production so verification links survive restarts")
+		log.Printf("signup: using ephemeral HMAC secret — set SWARM_SIGNUP_SECRET in production so verification links survive restarts")
 	}
 
-	s.signup.VerifyBaseURL = envDefault("KAI_VERIFY_BASE_URL", "http://localhost:8080/api/signup")
+	s.signup.VerifyBaseURL = envDefault("SWARM_VERIFY_BASE_URL", "http://localhost:8080/api/signup")
 	s.signup.VerifyTTL = 24 * time.Hour
 	s.signup.From = os.Getenv("EMAIL_FROM") // pkg/email falls back to its own default if empty
 	s.signup.IPLimitPerHr = 5

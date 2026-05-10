@@ -10,7 +10,7 @@ import (
 
 // MemoryStore is a Store backed by a sync.Mutex-guarded map. Used in tests
 // (so test packages don't have to spin up Postgres) and in the
-// KAI_INSECURE_DEV_AUTH path where there's no real database. Not durable;
+// SWARM_INSECURE_DEV_AUTH path where there's no real database. Not durable;
 // every restart loses everything.
 type MemoryStore struct {
 	mu     sync.Mutex

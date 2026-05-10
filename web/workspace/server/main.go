@@ -140,7 +140,7 @@ func main() {
 		namespace:  namespace,
 		chatBase:   os.Getenv("CHAT_BASE_URL"),
 		statusBase: os.Getenv("STATUS_BASE_URL"),
-		demoMode:   envTrue("KAI_INSECURE_DEV_AUTH"),
+		demoMode:   envTrue("SWARM_INSECURE_DEV_AUTH"),
 	}
 
 	if s.demoMode {
@@ -149,12 +149,12 @@ func main() {
 		}
 		secret := make([]byte, 32)
 		if _, err := rand.Read(secret); err != nil {
-			log.Fatalf("KAI_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
+			log.Fatalf("SWARM_INSECURE_DEV_AUTH: failed to seed dev JWT secret: %v", err)
 		}
 		s.devJWTSecret = secret
 		s.revoker = auth.NewMemoryRevoker()
 		log.Printf("============================================================")
-		log.Printf("KAI_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
+		log.Printf("SWARM_INSECURE_DEV_AUTH ENABLED — DO NOT USE IN PRODUCTION")
 		log.Printf("Center serves canned data; JWT signed with random ephemeral secret.")
 		log.Printf("Listening on loopback %s only.", addr)
 		log.Printf("============================================================")
@@ -180,24 +180,24 @@ func main() {
 	}
 
 	// User store: MemoryStore by default; opt in to Postgres-backed PoolStore
-	// by setting `KAI_USERS_DSN`. Sharing the store across onboarding +
+	// by setting `SWARM_USERS_DSN`. Sharing the store across onboarding +
 	// workspace is what lets a user signed up via onboarding actually log
 	// in to the workspace dashboard. Both services point at the same
 	// database in production. Set the same DSN on both pods.
-	if dsn := os.Getenv("KAI_USERS_DSN"); dsn != "" {
+	if dsn := os.Getenv("SWARM_USERS_DSN"); dsn != "" {
 		store, err := newPoolStore(dsn)
 		if err != nil {
-			log.Fatalf("workspace: KAI_USERS_DSN configured but failed to connect: %v", err)
+			log.Fatalf("workspace: SWARM_USERS_DSN configured but failed to connect: %v", err)
 		}
 		s.users = store
-		log.Printf("workspace: using Postgres user store (KAI_USERS_DSN set)")
+		log.Printf("workspace: using Postgres user store (SWARM_USERS_DSN set)")
 	} else {
 		s.users = users.NewMemoryStore()
-		log.Printf("workspace: using in-memory user store (set KAI_USERS_DSN to use Postgres)")
+		log.Printf("workspace: using in-memory user store (set SWARM_USERS_DSN to use Postgres)")
 	}
 
 	// Account-deletion flow (TASK-021 Phase 1) — opt-in via env vars. All
-	// three of RESEND_API_KEY + KAI_DELETION_SECRET + KAI_DASHBOARD_BASE_URL
+	// three of RESEND_API_KEY + SWARM_DELETION_SECRET + SWARM_DASHBOARD_BASE_URL
 	// must be set or the endpoints return 503.
 	if apiKey := os.Getenv("RESEND_API_KEY"); apiKey != "" {
 		if sender, err := email.NewResendSender(apiKey); err != nil {
@@ -220,15 +220,15 @@ func main() {
 			log.Printf("workspace: dev-mode disk email sender at %s", dir)
 		}
 	}
-	if secret := os.Getenv("KAI_DELETION_SECRET"); secret != "" {
+	if secret := os.Getenv("SWARM_DELETION_SECRET"); secret != "" {
 		s.deletionSecret = []byte(secret)
 	}
-	s.deletionBaseURL = os.Getenv("KAI_DASHBOARD_BASE_URL")
+	s.deletionBaseURL = os.Getenv("SWARM_DASHBOARD_BASE_URL")
 	s.deletionTTL = 24 * time.Hour
 	if s.email != nil && len(s.deletionSecret) > 0 && s.deletionBaseURL != "" {
 		log.Printf("workspace: account-deletion flow enabled (base=%s)", s.deletionBaseURL)
 	} else {
-		log.Printf("workspace: account-deletion flow disabled — set RESEND_API_KEY + KAI_DELETION_SECRET + KAI_DASHBOARD_BASE_URL to enable")
+		log.Printf("workspace: account-deletion flow disabled — set RESEND_API_KEY + SWARM_DELETION_SECRET + SWARM_DASHBOARD_BASE_URL to enable")
 	}
 
 	// Stripe billing (TASK-016 Phase 1). Opt-in via env. Tier→price-ID
@@ -464,7 +464,7 @@ func (s *server) buildLinks(slug string, obj *unstructured.Unstructured) []appLi
 	// Both chat and status use email+password login (no per-link token).
 	links := []appLink{
 		{
-			Label:       "Chat with Kai",
+			Label:       "Chat with Mind Swarm",
 			URL:         joinURL(s.chatBase, "/chat/"+encSlug),
 			Description: "Talk to your project assistant.",
 			Icon:        "💬",
@@ -558,10 +558,10 @@ func envTrue(k string) bool {
 func requireLoopback(addr string) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires loopback ADDR (e.g. 127.0.0.1:8080), got %q: %v", addr, err)
+		return fmt.Errorf("SWARM_INSECURE_DEV_AUTH requires loopback ADDR (e.g. 127.0.0.1:8080), got %q: %v", addr, err)
 	}
 	if host == "" {
-		return fmt.Errorf("KAI_INSECURE_DEV_AUTH requires explicit loopback host (e.g. 127.0.0.1:8080), got %q", addr)
+		return fmt.Errorf("SWARM_INSECURE_DEV_AUTH requires explicit loopback host (e.g. 127.0.0.1:8080), got %q", addr)
 	}
 	if host == "localhost" {
 		return nil
@@ -569,7 +569,7 @@ func requireLoopback(addr string) error {
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return nil
 	}
-	return fmt.Errorf("KAI_INSECURE_DEV_AUTH refuses non-loopback host %q — bind to 127.0.0.1, ::1, or localhost", host)
+	return fmt.Errorf("SWARM_INSECURE_DEV_AUTH refuses non-loopback host %q — bind to 127.0.0.1, ::1, or localhost", host)
 }
 
 // demoData returns a canned, fully-populated centerResponse for any slug.
@@ -591,7 +591,7 @@ func demoData(slug string) centerResponse {
 		Status:       "online",
 		StatusLabel:  "Online",
 		Links: []appLink{
-			{Label: "Chat with Kai", URL: "/chat/" + slug, Description: "Talk to your project assistant.", Icon: "💬"},
+			{Label: "Chat with Mind Swarm", URL: "/chat/" + slug, Description: "Talk to your project assistant.", Icon: "💬"},
 			{Label: "Status", URL: "/status/" + slug, Description: "Check whether your assistant is online.", Icon: "🟢"},
 			{Label: "MissionControl", URL: "https://mc.emai.dev/" + slug, Description: "Project board: tasks, meetings, decisions.", Icon: "📋", External: true},
 			{Label: "Robot fleet", URL: "https://neodem.emai.dev/" + slug, Description: "NeoDEM dashboard for your robots.", Icon: "🤖", External: true},

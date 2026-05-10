@@ -1035,7 +1035,7 @@ function focusBriefing(id: string) {
 
 function sidebarHTML(data: CenterData): string {
   const initials = customerInitials(data.customerName || data.slug);
-  const chatLink = data.links.find((l) => l.label === 'Chat with Kai')?.url || '#';
+  const chatLink = data.links.find((l) => l.label === 'Chat with Mind Swarm')?.url || '#';
   const items = navItems(data);
   const active = parseRoute().route;
   const navHTML = items

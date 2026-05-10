@@ -26,7 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/../templates"
 DEFAULT_OUTPUT="$PWD/out/customers"
-DEFAULT_KAI_OUTPUT="$PWD/out/environments"
+DEFAULT_SWARM_OUTPUT="$PWD/out/environments"
 
 # Colors
 RED='\033[0;31m'
@@ -63,7 +63,7 @@ PROJECT_NAME=""
 HQ_ID="CUST-XXX"
 ENV="cloud"
 OUTPUT=""
-KAI_OUTPUT=""
+SWARM_OUTPUT=""
 DRY_RUN=false
 TELEGRAM=false
 declare -a EXTRA_VARS=()
@@ -130,7 +130,7 @@ while [[ $# -gt 0 ]]; do
     --hq-id) HQ_ID="$2"; shift 2 ;;
     --env) ENV="$2"; shift 2 ;;
     --output) OUTPUT="$2"; shift 2 ;;
-    --kai-output) KAI_OUTPUT="$2"; shift 2 ;;
+    --kai-output) SWARM_OUTPUT="$2"; shift 2 ;;
     --var) EXTRA_VARS+=("$2"); shift 2 ;;
     --telegram) TELEGRAM=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
@@ -140,7 +140,7 @@ done
 
 # Defaults
 OUTPUT="${OUTPUT:-$DEFAULT_OUTPUT/$SLUG}"
-KAI_OUTPUT="${KAI_OUTPUT:-$DEFAULT_KAI_OUTPUT/$ENV/kai-$SLUG.yaml}"
+SWARM_OUTPUT="${SWARM_OUTPUT:-$DEFAULT_SWARM_OUTPUT/$ENV/kai-$SLUG.yaml}"
 
 # ── Validate ─────────────────────────────────────────────────────────
 TEMPLATE_DIR="$TEMPLATES_DIR/$TEMPLATE"
@@ -268,8 +268,8 @@ for tmpl in "$TEMPLATE_DIR"/*.tmpl; do
 
   # kai.yaml goes to a separate location
   if [[ "$fname" == "kai.yaml" ]]; then
-    mkdir -p "$(dirname "$KAI_OUTPUT")"
-    render "$tmpl" > "$KAI_OUTPUT"
+    mkdir -p "$(dirname "$SWARM_OUTPUT")"
+    render "$tmpl" > "$SWARM_OUTPUT"
     continue
   fi
 
@@ -321,7 +321,7 @@ echo ""
 
 # Show relative paths if possible
 REL_OUTPUT="${OUTPUT#$PWD/}"
-REL_KAI="${KAI_OUTPUT#$PWD/}"
+REL_KAI="${SWARM_OUTPUT#$PWD/}"
 
 echo "  $REL_OUTPUT/"
 for fname in config.yml SOUL.md USER.md TOOLS.md HEARTBEAT.md .env .env.example; do

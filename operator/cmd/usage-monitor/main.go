@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// 80%-of-cap warning email branch (TASK-019 Phase 5). All three of
-	// RESEND_API_KEY + KAI_UPGRADE_URL + a User-lookup wiring must be
+	// RESEND_API_KEY + SWARM_UPGRADE_URL + a User-lookup wiring must be
 	// present for the branch to fire. The User-lookup adapter lives in the
 	// swarm-cloud overlay (it depends on `pkg/userspg`); the public swarm
 	// repo ships only the contract here. Until the overlay wires it, the
@@ -76,10 +76,10 @@ func main() {
 			log.Printf("usage-monitor: RESEND_API_KEY rejected (%v); skipping email branch", err)
 		} else {
 			r.Email = sender
-			r.UpgradeURL = envDefault("KAI_UPGRADE_URL", "")
+			r.UpgradeURL = envDefault("SWARM_UPGRADE_URL", "")
 			r.EmailFrom = os.Getenv("EMAIL_FROM")
 			if r.UpgradeURL == "" {
-				log.Printf("usage-monitor: RESEND_API_KEY set but KAI_UPGRADE_URL missing — email branch stays disabled")
+				log.Printf("usage-monitor: RESEND_API_KEY set but SWARM_UPGRADE_URL missing — email branch stays disabled")
 				r.Email = nil
 			} else {
 				log.Printf("usage-monitor: warning-email branch enabled (UpgradeURL=%s, From=%q)", r.UpgradeURL, r.EmailFrom)
@@ -110,10 +110,10 @@ func main() {
 	log.Printf("usage-monitor pass complete: total=%d suspended=%d errors=%d", len(results), suspended, errs)
 
 	// Phase 4: emit metrics to Prometheus pushgateway (TASK-019). Opt-in via
-	// KAI_PUSHGATEWAY_URL — when unset, NewMetricsPusher returns nil and Push
+	// SWARM_PUSHGATEWAY_URL — when unset, NewMetricsPusher returns nil and Push
 	// silently no-ops. Metric push failures are non-fatal — the suspend work
 	// already landed; a pushgateway hiccup shouldn't fail the whole pass.
-	if pusher := usage.NewMetricsPusher(os.Getenv("KAI_PUSHGATEWAY_URL")); pusher != nil {
+	if pusher := usage.NewMetricsPusher(os.Getenv("SWARM_PUSHGATEWAY_URL")); pusher != nil {
 		log.Printf("usage-monitor: pushing metrics to %s", pusher.URL)
 		if err := pusher.Push(context.Background(), results); err != nil {
 			log.Printf("usage-monitor: metric push failed (continuing): %v", err)

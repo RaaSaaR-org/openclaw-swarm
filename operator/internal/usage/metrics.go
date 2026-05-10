@@ -16,7 +16,7 @@ import (
 
 // MetricsPusher emits the per-workspace usage gauges + the per-pass counters
 // to a Prometheus Pushgateway after each Runner pass (TASK-019 Phase 4).
-// Opt-in via cmd/usage-monitor's KAI_PUSHGATEWAY_URL env var; nil pushers
+// Opt-in via cmd/usage-monitor's SWARM_PUSHGATEWAY_URL env var; nil pushers
 // silently no-op so deploys without a pushgateway aren't forced into one.
 //
 // We don't pull in `prometheus/client_golang` for this — the surface is one

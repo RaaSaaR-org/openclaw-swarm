@@ -1,9 +1,9 @@
 {
-  "name": "Kai",
-  "agentName": "Kai",
-  "domain": "kai.example.org",
-  "domainUrl": "https://kai.example.org",
-  "supportEmail": "support@kai.example.org",
+  "name": "Mind Swarm",
+  "agentName": "Mind Swarm",
+  "domain": "mindswarm.example.org",
+  "domainUrl": "https://mindswarm.example.org",
+  "supportEmail": "support@mindswarm.example.org",
   "fontFamily": "Geist",
   "footerCredit": "Powered by OpenClaw",
   "poweredBy": { "label": "OpenClaw", "url": "https://openclaw.ai" },
@@ -11,42 +11,42 @@
   "faviconUrl": "/branding/favicon.svg",
   "copy": {
     "chat": {
-      "docTitle": "Kai",
+      "docTitle": "Mind Swarm",
       "missingSlugTitle": "Project link required",
       "missingSlugHelp": "Need help? Reach out to the team that gave you this link.",
-      "signInTitle": "Sign in to chat with Kai",
+      "signInTitle": "Sign in to chat with Mind Swarm",
       "signInSubtitle": "Use the email and password your project lead shared with you.",
       "welcomeBody": "Send a message to start working with your project assistant.",
-      "typingPlaceholder": "Message Kai…"
+      "typingPlaceholder": "Message Mind Swarm…"
     },
     "workspace": {
-      "docTitleSuffix": " · Kai",
+      "docTitleSuffix": " · Mind Swarm",
       "missingSlugBody": "Open the project hub from the link your team shared.",
-      "briefingsTitle": "Updates from Kai",
-      "askLabel": "Ask Kai a question",
-      "whatItDoesTitle": "What Kai does for you",
-      "whereToReachTitle": "Where you can reach Kai",
+      "briefingsTitle": "Updates from Mind Swarm",
+      "askLabel": "Ask Mind Swarm a question",
+      "whatItDoesTitle": "What Mind Swarm does for you",
+      "whereToReachTitle": "Where you can reach Mind Swarm",
       "teamPlaceholder": "Your project team",
-      "hubDocTitle": "Hub · Kai"
+      "hubDocTitle": "Hub · Mind Swarm"
     },
     "admin": {
-      "docTitle": "Swarm Admin Console · Kai",
-      "loginHint": "Sign in to manage Kai instances.",
-      "instancesHeading": "Kai instances"
+      "docTitle": "Swarm Admin Console · Mind Swarm",
+      "loginHint": "Sign in to manage Mind Swarm instances.",
+      "instancesHeading": "Mind Swarm instances"
     },
     "onboarding": {
-      "docTitle": "Onboard a customer · Kai",
+      "docTitle": "Onboard a customer · Mind Swarm",
       "loginHint": "Sign in with your operator credentials.",
-      "signupTitle": "Sign up for Kai",
-      "provisionTitle": "Provision a Kai instance",
-      "provisionHelp": "Creates a private Kai workspace for the named project.",
+      "signupTitle": "Sign up for Mind Swarm",
+      "provisionTitle": "Provision a Mind Swarm instance",
+      "provisionHelp": "Creates a private Mind Swarm workspace for the named project.",
       "genericErrorContact": "Contact the team via the support address."
     },
     "status": {
       "docTitlePrefix": "Status · ",
-      "docTitleSuffix": " · Kai",
-      "missingSlugBody": "Open your personal status link sent by the Kai team.",
-      "expiredLinkBody": "This status link has expired. Ask the Kai team for a fresh one."
+      "docTitleSuffix": " · Mind Swarm",
+      "missingSlugBody": "Open your personal status link sent by the Mind Swarm team.",
+      "expiredLinkBody": "This status link has expired. Ask the Mind Swarm team for a fresh one."
     }
   }
 }

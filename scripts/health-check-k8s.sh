@@ -62,7 +62,7 @@ fi
 
 CURRENT_CTX=$("${KCTL[@]}" config current-context 2>/dev/null || echo "(unknown)")
 
-if ! KAI_JSON=$("${KCTL[@]}" -n "$NAMESPACE" get kaiinstances -o json 2>/dev/null); then
+if ! SWARM_JSON=$("${KCTL[@]}" -n "$NAMESPACE" get kaiinstances -o json 2>/dev/null); then
     echo "Error: cannot list KaiInstances in $CURRENT_CTX/$NAMESPACE — check --context, --namespace, and RBAC" >&2
     exit 2
 fi
@@ -77,7 +77,7 @@ KAIS=()
 while IFS= read -r kai_line; do
     [[ -z "$kai_line" ]] && continue
     KAIS+=("$kai_line")
-done < <(echo "$KAI_JSON" | jq -c '.items[]')
+done < <(echo "$SWARM_JSON" | jq -c '.items[]')
 for kai in "${KAIS[@]:-}"; do
     [[ -z "$kai" ]] && continue
     TOTAL=$((TOTAL + 1))

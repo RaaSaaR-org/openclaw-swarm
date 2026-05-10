@@ -202,11 +202,11 @@ func main() {
 		ingressTLSSecret = "kai-emai-dev-tls"
 	}
 
-	catalogDir := os.Getenv("KAI_CATALOG_DIR")
+	catalogDir := os.Getenv("SWARM_CATALOG_DIR")
 	if catalogDir == "" {
 		catalogDir = "/etc/swarm/catalog"
 	}
-	perSlugIngress := os.Getenv("KAI_PER_SLUG_INGRESS") == "1" || os.Getenv("KAI_PER_SLUG_INGRESS") == "true"
+	perSlugIngress := os.Getenv("SWARM_PER_SLUG_INGRESS") == "1" || os.Getenv("SWARM_PER_SLUG_INGRESS") == "true"
 
 	if err := (&controller.KaiInstanceReconciler{
 		Client:                 mgr.GetClient(),

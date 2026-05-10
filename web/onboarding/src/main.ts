@@ -770,7 +770,7 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-// The Kai brand mark — three nodes in triangle inside a faint circle.
+// The Mind Swarm brand mark — three nodes in triangle inside a faint circle.
 // Lifted from status-page so the verified/loading states feel continuous
 // with the rest of the product. Per brand.md §5.
 function indicatorMarkSVG(): string {

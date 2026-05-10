@@ -12,7 +12,7 @@
 # isn't load-bearing — Postgres can absorb one DELETE statement at any time.
 #
 # Secrets: the DSN lives in a `onboarding-postgres` Secret with key `dsn`.
-# Same Secret the onboarding server consumes once `KAI_USERS_DSN` wiring
+# Same Secret the onboarding server consumes once `SWARM_USERS_DSN` wiring
 # lands on the server side (the public swarm repo today still uses the
 # in-memory user store; the swarm-cloud overlay flips that to the PoolStore
 # and creates this Secret).
@@ -49,15 +49,15 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["/gdpr-purge"]
               env:
-                - name: KAI_USERS_DSN
+                - name: SWARM_USERS_DSN
                   valueFrom:
                     secretKeyRef:
                       name: onboarding-postgres
                       key: dsn
                 # Optional: shrink the grace window in staging by setting
-                # KAI_GDPR_GRACE here (e.g. "168h" for 7 days). Production
+                # SWARM_GDPR_GRACE here (e.g. "168h" for 7 days). Production
                 # leaves it unset → the binary uses pkg/users.GracePeriod.
-                # - name: KAI_GDPR_GRACE
+                # - name: SWARM_GDPR_GRACE
                 #   value: "720h"
               resources:
                 requests:

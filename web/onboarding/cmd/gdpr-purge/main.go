@@ -12,13 +12,13 @@
 //
 // Env vars:
 //
-//	KAI_USERS_DSN    Postgres URL — same DSN the onboarding server uses;
+//	SWARM_USERS_DSN    Postgres URL — same DSN the onboarding server uses;
 //	                 the cron + the server share one Postgres instance.
-//	KAI_GDPR_GRACE   Optional override for the grace window (Go duration
+//	SWARM_GDPR_GRACE   Optional override for the grace window (Go duration
 //	                 string, e.g. "168h"). Defaults to `users.GracePeriod`
 //	                 (30 days). Lets ops shrink the window in staging
 //	                 without redeploying.
-//	KAI_GDPR_TIMEOUT Optional wall-clock ceiling (Go duration). Defaults
+//	SWARM_GDPR_TIMEOUT Optional wall-clock ceiling (Go duration). Defaults
 //	                 to 5m — a daily purge of even a large tenant should
 //	                 be sub-second; 5 minutes is a generous failsafe.
 //
@@ -51,13 +51,13 @@ func main() {
 		grace   time.Duration
 		timeout time.Duration
 	)
-	flag.StringVar(&dsn, "dsn", os.Getenv("KAI_USERS_DSN"), "Postgres DSN (KAI_USERS_DSN)")
-	flag.DurationVar(&grace, "grace", parseDurationDefault(os.Getenv("KAI_GDPR_GRACE"), 0), "grace window override (default: pkg/users.GracePeriod = 30 days)")
-	flag.DurationVar(&timeout, "timeout", parseDurationDefault(os.Getenv("KAI_GDPR_TIMEOUT"), 5*time.Minute), "wall-clock ceiling for the pass")
+	flag.StringVar(&dsn, "dsn", os.Getenv("SWARM_USERS_DSN"), "Postgres DSN (SWARM_USERS_DSN)")
+	flag.DurationVar(&grace, "grace", parseDurationDefault(os.Getenv("SWARM_GDPR_GRACE"), 0), "grace window override (default: pkg/users.GracePeriod = 30 days)")
+	flag.DurationVar(&timeout, "timeout", parseDurationDefault(os.Getenv("SWARM_GDPR_TIMEOUT"), 5*time.Minute), "wall-clock ceiling for the pass")
 	flag.Parse()
 
 	if dsn == "" {
-		log.Fatal("KAI_USERS_DSN must be set")
+		log.Fatal("SWARM_USERS_DSN must be set")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

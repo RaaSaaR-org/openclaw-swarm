@@ -52,7 +52,7 @@ spec:
                 # metric branch — the cron just suspends + emails without
                 # publishing metrics. When set, the cron pushes once per pass
                 # at the end with HTTP PUT (replace-job semantics).
-                - name: KAI_PUSHGATEWAY_URL
+                - name: SWARM_PUSHGATEWAY_URL
                   value: ""  # e.g. http://prometheus-pushgateway.monitoring.svc:9091
               resources:
                 requests:

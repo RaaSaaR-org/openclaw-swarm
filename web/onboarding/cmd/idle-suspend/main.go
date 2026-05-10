@@ -11,10 +11,10 @@
 //
 // Env vars:
 //
-//	KAI_USERS_DSN      Postgres URL — same DSN onboarding + gdpr-purge use.
+//	SWARM_USERS_DSN      Postgres URL — same DSN onboarding + gdpr-purge use.
 //	SWARM_NAMESPACE    Namespace to walk for KaiInstances. Defaults to
 //	                   `swarm-system` (matches the operator's default).
-//	KAI_IDLE_TIMEOUT   Wall-clock ceiling (Go duration). Defaults to 5m.
+//	SWARM_IDLE_TIMEOUT   Wall-clock ceiling (Go duration). Defaults to 5m.
 //
 // In-cluster service account needs:
 //   - `kaiinstances.swarm.emai.io` list + patch (the suspend write)
@@ -59,13 +59,13 @@ func main() {
 		namespace string
 		timeout   time.Duration
 	)
-	flag.StringVar(&dsn, "dsn", os.Getenv("KAI_USERS_DSN"), "Postgres DSN (KAI_USERS_DSN)")
+	flag.StringVar(&dsn, "dsn", os.Getenv("SWARM_USERS_DSN"), "Postgres DSN (SWARM_USERS_DSN)")
 	flag.StringVar(&namespace, "namespace", envDefault("SWARM_NAMESPACE", "swarm-system"), "namespace to walk for KaiInstances")
-	flag.DurationVar(&timeout, "timeout", parseDurationDefault(os.Getenv("KAI_IDLE_TIMEOUT"), 5*time.Minute), "wall-clock ceiling")
+	flag.DurationVar(&timeout, "timeout", parseDurationDefault(os.Getenv("SWARM_IDLE_TIMEOUT"), 5*time.Minute), "wall-clock ceiling")
 	flag.Parse()
 
 	if dsn == "" {
-		log.Fatal("KAI_USERS_DSN must be set")
+		log.Fatal("SWARM_USERS_DSN must be set")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

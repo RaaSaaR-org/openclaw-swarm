@@ -80,7 +80,7 @@ spec:
           # - name: SWARM_POOLED_OPENROUTER_SECRET
           #   value: "swarm-pooled-openrouter"
           #
-          # KAI_CATALOG_DIR is where the operator reads the SaaS app catalog
+          # SWARM_CATALOG_DIR is where the operator reads the SaaS app catalog
           # from at runtime (TASK-018 Phase 1). When a KaiInstance has
           # `spec.appRef` set, the operator looks for
           # `<dir>/<appRef>/SOUL.md.tmpl` and uses that persona's SOUL.md
@@ -97,9 +97,9 @@ spec:
           # (matches the on-disk layout in agents/catalog/). The operator
           # tolerates a missing dir/file — falls back to the embedded
           # customer-template — so this is safe to wire up incrementally.
-          - name: KAI_CATALOG_DIR
+          - name: SWARM_CATALOG_DIR
             value: "/etc/swarm/catalog"
-          # KAI_PER_SLUG_INGRESS=1 makes the operator render per-tenant
+          # SWARM_PER_SLUG_INGRESS=1 makes the operator render per-tenant
           # Ingresses with host `<slug>.<INGRESS_DOMAIN>` + path `/ws`
           # (the SaaS shape — wildcard cert from TASK-017 Phase 0 covers
           # it). Default (unset) keeps the legacy shared host
@@ -108,7 +108,7 @@ spec:
           # Flip this only AFTER the deployment overlay has updated each
           # tenant's chat-bridge config to point at the new URL — see
           # TASK-017 Phase 2+ for the cutover playbook.
-          # - name: KAI_PER_SLUG_INGRESS
+          # - name: SWARM_PER_SLUG_INGRESS
           #   value: "1"
         ports: []
         securityContext:
