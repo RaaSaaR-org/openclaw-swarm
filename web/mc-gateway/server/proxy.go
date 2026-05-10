@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,10 +108,18 @@ func (s *server) handleRequest(w http.ResponseWriter, r *http.Request) {
 			s.forward(w, r, tok)
 			return
 		}
-		// Tenant: forward, then post-verify the response's `path` includes
-		// the tenant's customer dir. On mismatch, return 404 (avoids
-		// existence leaks). The task ID is in the URL path; we don't have
-		// the customer until the upstream tells us.
+		// Tenant: pre-check ownership with an upstream GET before forwarding
+		// the write. Post-verifying alone is too late — by the time we'd see
+		// the response, mc has already mutated the file. We GET the task
+		// entity, refuse the move with 404 if it's not the tenant's, and
+		// only then forward the POST. We still post-verify the response as
+		// defense-in-depth in case the upstream returns a path under a
+		// different customer subtree.
+		if !s.precheckOwnership(r.Context(), "task", params["id"], tok.CustomerID) {
+			writeProblem(w, http.StatusNotFound, "not-found", "Not found",
+				"no such entity")
+			return
+		}
 		s.forwardWithPostVerify(w, r, tok, params, verifyMovePath)
 		return
 
@@ -225,6 +234,40 @@ func matchesCustomerID(body []byte, customerID string) bool {
 	// CUST-NNN ids are unique enough across the JSON shape that a literal
 	// match is safe — they only appear inside frontmatter or paths.
 	return bytes.Contains(body, []byte(customerID))
+}
+
+// precheckOwnership does an internal GET to mc-api for /v1/entities/{kind}/{id}
+// and reports whether the response references the tenant's customer id. It
+// gates write endpoints (move, future tenant-writable routes) so the write
+// is refused BEFORE it lands upstream. Post-verifying a write is too late
+// because mc has already mutated the on-disk file by the time we see the
+// response — and the disk write is the security boundary, not the HTTP
+// status code we return to the client.
+//
+// Returns false on any error (network, parse, non-2xx) so a flaky upstream
+// or a missing task fails closed rather than leaking access.
+func (s *server) precheckOwnership(ctx context.Context, kind, id, customerID string) bool {
+	target := *s.upstream
+	target.Path = "/v1/entities/" + kind + "/" + id
+	target.RawQuery = ""
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+s.upstreamToken)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return false
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+	return matchesCustomerID(body, customerID)
 }
 
 // callUpstream rewrites the inbound request to target the upstream URL with

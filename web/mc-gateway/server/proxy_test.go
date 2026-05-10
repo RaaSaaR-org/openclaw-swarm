@@ -280,13 +280,21 @@ func TestTenant_CreateTask_ForwardsWithOwnCustomerID(t *testing.T) {
 	}
 }
 
-// ─────────────────── tenant role: move task post-verify ───────────────────
+// ─────────────────── tenant role: move task ownership pre-check ───────────────────
 
 func TestTenant_MoveTask_AllowsOwnTask(t *testing.T) {
 	t.Parallel()
 	s, up := fixture(t)
+	// Gateway first GETs the entity to pre-check ownership, then POSTs the
+	// move. Mock both paths.
 	up.respond = func(r recordedReq) (int, []byte, http.Header) {
-		return http.StatusOK, []byte(`{"id":"TASK-001","old_status":"backlog","new_status":"done","path":"/repo/customers/CUST-001-acme/tasks/done/TASK-001-smoke.md"}`), nil
+		switch {
+		case r.method == "GET" && r.path == "/v1/entities/task/TASK-001":
+			return http.StatusOK, []byte(`{"kind":"task","id":"TASK-001","frontmatter":{"customers":["[[CUST-001]]"]}}`), nil
+		case r.method == "POST" && r.path == "/v1/tasks/TASK-001/move":
+			return http.StatusOK, []byte(`{"id":"TASK-001","old_status":"backlog","new_status":"done","path":"/repo/customers/CUST-001-acme/tasks/done/TASK-001-smoke.md"}`), nil
+		}
+		return http.StatusInternalServerError, []byte(`{"detail":"unexpected upstream call: ` + r.method + ` ` + r.path + `"}`), nil
 	}
 	rr := roundTrip(s, "POST", "/v1/tasks/TASK-001/move", "TENANT", map[string]any{
 		"status": "done",
@@ -300,6 +308,13 @@ func TestTenant_MoveTask_RejectsCrossTenantTask(t *testing.T) {
 	t.Parallel()
 	s, up := fixture(t)
 	up.respond = func(r recordedReq) (int, []byte, http.Header) {
+		// Pre-check returns the task owned by a different tenant.
+		if r.method == "GET" && r.path == "/v1/entities/task/TASK-001" {
+			return http.StatusOK, []byte(`{"kind":"task","id":"TASK-001","frontmatter":{"customers":["[[CUST-002]]"]}}`), nil
+		}
+		// If gateway is buggy and still forwards the move, mc-api would
+		// happily process it — we return success so the test can assert
+		// the gateway never reaches this code path.
 		return http.StatusOK, []byte(`{"id":"TASK-001","old_status":"backlog","new_status":"done","path":"/repo/customers/CUST-002-other/tasks/done/TASK-001-smoke.md"}`), nil
 	}
 	rr := roundTrip(s, "POST", "/v1/tasks/TASK-001/move", "TENANT", map[string]any{
@@ -307,6 +322,47 @@ func TestTenant_MoveTask_RejectsCrossTenantTask(t *testing.T) {
 	})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for cross-tenant move, got %d", rr.Code)
+	}
+	// Critical: the POST /move must NEVER have been forwarded upstream. mc
+	// mutates the on-disk file when it processes a move; post-verifying the
+	// response would be too late. This test pins the pre-check behavior:
+	// gateway sees only the GET pre-check, not the POST.
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	for _, req := range up.requests {
+		if req.method == "POST" && req.path == "/v1/tasks/TASK-001/move" {
+			t.Fatalf("gateway forwarded the move to upstream — mutation would have landed before the 404. Upstream saw %d requests: %+v",
+				len(up.requests), up.requests)
+		}
+	}
+}
+
+// TestTenant_MoveTask_PreCheckFailureDoesNotForward pins that any pre-check
+// failure (upstream 404 on the GET, upstream 5xx, network error) refuses the
+// move WITHOUT forwarding the POST. This is the close-fail property: a
+// flaky upstream during the pre-check must not silently allow the write.
+func TestTenant_MoveTask_PreCheckFailureDoesNotForward(t *testing.T) {
+	t.Parallel()
+	s, up := fixture(t)
+	up.respond = func(r recordedReq) (int, []byte, http.Header) {
+		if r.method == "GET" && r.path == "/v1/entities/task/TASK-001" {
+			// Simulate upstream 404 (task doesn't exist or transient error).
+			return http.StatusNotFound, []byte(`{"detail":"no such entity"}`), nil
+		}
+		return http.StatusOK, []byte(`{"path":"/repo/customers/CUST-001-acme/tasks/done/TASK-001-smoke.md"}`), nil
+	}
+	rr := roundTrip(s, "POST", "/v1/tasks/TASK-001/move", "TENANT", map[string]any{
+		"status": "done",
+	})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when pre-check fails, got %d", rr.Code)
+	}
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	for _, req := range up.requests {
+		if req.method == "POST" {
+			t.Fatalf("gateway forwarded the move despite pre-check failure — upstream saw POST %s", req.path)
+		}
 	}
 }
 
