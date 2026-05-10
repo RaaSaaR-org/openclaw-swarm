@@ -104,7 +104,7 @@ Verified: production `astro build` produced 28 pages (8 base × 2 locales + 6 ag
 - TypeScript clean (`tsc --noEmit`); Vite build green: 89.72 kB JS / 41.30 kB CSS (was 86.48 kB / 40.95 kB — small bump from the new section).
 - Full chain a visitor can follow today: marketing `/pricing` → click "Choose Starter" → `/signup?tier=starter` → onboarding email verify → workspace dashboard → "Upgrade to Starter" button → Stripe Checkout → webhook syncs tier on return. Auto-trigger-on-verify (carry the `?tier=` hint through verify → auto-redirect to checkout) is a Phase 1.B refinement under [[TASK-013]].
 
-**Phase 5 (swarm-cloud becomes a real git repo) — done** on 2026-05-10. `git init` + three clean root commits on `main` (scaffolding, marketing site, K8s overlay + deploy.sh) per [[TASK-023]] Phase 2. GitHub remote not yet attached; user adds + pushes when ready. The marketing site, kubernetes/ overlay, environments/, and deploy.sh now live in the swarm-cloud repo on disk; the only thing the public swarm holds is what every fork-able platform should hold.
+**Phase 5 (swarm-cloud becomes a real git repo) — done** on 2026-05-10. Three clean root commits on `main` (scaffolding, marketing site, K8s overlay + deploy.sh) per [[TASK-023]] Phase 2; pushed to **github.com/MIND-Studio/swarm-cloud** (private). The marketing site, kubernetes/ overlay, environments/, and deploy.sh all live in the swarm-cloud repo now; the only thing the public swarm holds is what every fork-able platform should hold.
 
 **Remaining phases blocked on upstream tasks:**
 - Phase 3 (inline signup form): blocked on [[TASK-013]] Phase 3 (SPA-side signup form).
