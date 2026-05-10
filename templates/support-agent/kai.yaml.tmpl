@@ -1,12 +1,12 @@
-apiVersion: swarm.emai.io/v1alpha1
+apiVersion: swarm.emai.io/v1alpha2
 kind: KaiInstance
 metadata:
   name: kai-{{CUSTOMER_SLUG}}
   namespace: emai-swarm
 spec:
-  customerName: "{{CUSTOMER_NAME}}"
+  tenantName: "{{CUSTOMER_NAME}}"
   projectName: "{{PROJECT_NAME}}"
-  customerSlug: "{{CUSTOMER_SLUG}}"
+  tenantSlug: "{{CUSTOMER_SLUG}}"
   gatewayAuth:
     mode: "token"
     token: "{{GATEWAY_TOKEN}}"

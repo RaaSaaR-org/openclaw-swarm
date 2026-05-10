@@ -77,7 +77,7 @@ apiVersion: swarm.emai.io/v1alpha1
 kind: KaiInstance
 metadata:
   name: acme
-  namespace: emai-swarm
+  namespace: swarm-system
 spec:
   customerName: "Acme GmbH"
   projectName: "PROJ-001 Website Relaunch"
@@ -92,13 +92,13 @@ spec:
 kubectl apply -f acme.yaml
 kubectl get kaiinstances
 # NAME   CUSTOMER    PHASE     READY   GATEWAY                              EXTERNAL                           AGE
-# acme   Acme GmbH   Running   true    kai-acme.emai-swarm.svc:18789       https://kai.emai.dev/ws/acme       2m
+# acme   Acme GmbH   Running   true    kai-acme.swarm-system.svc:18789       https://kai.emai.dev/ws/acme       2m
 ```
 
 ## Uninstall
 
 ```bash
-kubectl delete kaiinstances --all -n emai-swarm   # remove instances (cascades child resources)
+kubectl delete kaiinstances --all -n swarm-system   # remove instances (cascades child resources)
 make undeploy                                       # remove controller
 make uninstall                                      # remove CRDs
 ```

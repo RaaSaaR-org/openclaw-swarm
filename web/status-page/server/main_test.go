@@ -25,16 +25,16 @@ func fakeDynServer(t *testing.T, items ...*unstructured.Unstructured) *server {
 		objs = append(objs, it)
 	}
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objs...)
-	return &server{dyn: dyn, namespace: "emai-swarm"}
+	return &server{dyn: dyn, namespace: "swarm-system"}
 }
 
 func newKaiInstance(slug, customerName, projectName, token, phase string, ready, suspended bool) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      "kai-" + slug,
-			"namespace": "emai-swarm",
+			"namespace": "swarm-system",
 		},
 		"spec": map[string]any{
 			"customerName": customerName,
@@ -154,7 +154,7 @@ func TestGetStatus_NotFound_Returns401(t *testing.T) {
 
 func TestGetStatus_NoDynClient_Returns503(t *testing.T) {
 	t.Parallel()
-	s := &server{namespace: "emai-swarm"} // dyn intentionally nil
+	s := &server{namespace: "swarm-system"} // dyn intentionally nil
 	code, _ := doStatusReq(t, s, "acme", "anything", "")
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when no dyn client, got %d", code)

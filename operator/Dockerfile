@@ -23,15 +23,21 @@ COPY operator/cmd ./cmd
 COPY operator/internal ./internal
 COPY operator/test ./test
 
-# Build the manager binary. GOARCH unset → builds for the host platform
+# Build both binaries. GOARCH unset → builds for the host platform
 # (linux/arm64 on Apple Silicon, linux/amd64 elsewhere).
+#   - manager:        the long-running controller + webhook server (cmd/main.go)
+#   - usage-monitor:  the once-a-day cron that suspends over-budget workspaces
+#                     (cmd/usage-monitor/main.go, TASK-019 Phase 3)
+# Both ship in the same image; the CronJob entrypoint picks /usage-monitor.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION}" -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags "-X main.Version=${VERSION}" -a -o usage-monitor cmd/usage-monitor/main.go
 
 # Use distroless as minimal base image to package the manager binary.
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/operator/manager .
+COPY --from=builder /workspace/operator/usage-monitor .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

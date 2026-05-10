@@ -16,7 +16,7 @@ import {
 import { loadBranding, applyBranding, DEFAULT_BRANDING, type Branding } from '@branding/loader';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
-let namespace = 'emai-swarm';
+let namespace = 'swarm-system';
 
 let b: Branding = DEFAULT_BRANDING;
 
@@ -104,6 +104,12 @@ interface SignupState {
   language: 'de' | 'en';
   submitting: boolean;
   error?: string;
+  /** Cloudflare-issued site key fetched from /api/onboarding/config; empty string when no CAPTCHA is configured. */
+  turnstileSiteKey: string;
+  /** Token produced by the Turnstile widget (cf-turnstile callback). Refreshed on every successful challenge. */
+  turnstileToken: string;
+  /** Tracks whether we've already kicked off the config fetch so renderSignup() can be called multiple times safely. */
+  configLoaded: boolean;
 }
 
 const signupState: SignupState = {
@@ -112,7 +118,29 @@ const signupState: SignupState = {
   app: 'personal-assistant',
   language: 'de',
   submitting: false,
+  turnstileSiteKey: '',
+  turnstileToken: '',
+  configLoaded: false,
 };
+
+// Turnstile's global API surface. The script in index.html attaches
+// `window.turnstile` once it's done loading; we feature-detect at use
+// time so the SPA still works in environments where the Cloudflare
+// challenges domain is blocked (the back end will reject the signup
+// with a CAPTCHA failure, which is the right outcome).
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (selector: string | HTMLElement, opts: {
+        sitekey: string;
+        callback?: (token: string) => void;
+        'error-callback'?: () => void;
+        'expired-callback'?: () => void;
+      }) => string;
+      reset: (widgetID?: string) => void;
+    };
+  }
+}
 
 function renderSignup(error?: string) {
   signupState.error = error;
@@ -166,6 +194,8 @@ function renderSignup(error?: string) {
 
         ${signupState.error ? `<p class="login-error" id="signup-error">${escapeHtml(signupState.error)}</p>` : '<p class="login-error" id="signup-error" hidden></p>'}
 
+        ${signupState.turnstileSiteKey ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(signupState.turnstileSiteKey)}" data-theme="dark" id="turnstile-widget"></div>` : ''}
+
         <button type="submit" class="primary-btn" id="signup-submit">Create my workspace</button>
         <p class="signup-fineprint">By signing up you agree to the <a href="https://kai.example.org/terms">terms of service</a> and <a href="https://kai.example.org/privacy">privacy policy</a>. <a href="/admin" class="muted-link">Admin?</a></p>
       </form>
@@ -202,6 +232,54 @@ function renderSignup(error?: string) {
     if (signupState.submitting) return;
     await submitSignup();
   });
+
+  // Fetch the runtime config + mount the Turnstile widget. Re-renders the
+  // form once the config is in so the widget div appears with the right
+  // sitekey. The fetch only happens once per page load.
+  if (!signupState.configLoaded) {
+    void loadOnboardingConfigAndRender();
+  } else if (signupState.turnstileSiteKey) {
+    mountTurnstileWidget();
+  }
+}
+
+async function loadOnboardingConfigAndRender() {
+  signupState.configLoaded = true;
+  try {
+    const cfg = await api.config();
+    if (cfg.turnstileSiteKey) {
+      signupState.turnstileSiteKey = cfg.turnstileSiteKey;
+      renderSignup();
+    }
+  } catch {
+    // Best-effort — if the config endpoint is down, the form still works
+    // with whatever CAPTCHA the server is running (a noopCaptcha in dev,
+    // or a Turnstile verifier that will reject the empty token in prod).
+  }
+}
+
+function mountTurnstileWidget() {
+  if (!signupState.turnstileSiteKey) return;
+  if (!window.turnstile) {
+    // Turnstile script hasn't finished loading yet — retry once. The
+    // widget div is already in the DOM; turnstile.render fills it in.
+    setTimeout(mountTurnstileWidget, 200);
+    return;
+  }
+  const target = document.getElementById('turnstile-widget');
+  if (!target) return;
+  window.turnstile.render(target, {
+    sitekey: signupState.turnstileSiteKey,
+    callback: (token: string) => {
+      signupState.turnstileToken = token;
+    },
+    'expired-callback': () => {
+      signupState.turnstileToken = '';
+    },
+    'error-callback': () => {
+      signupState.turnstileToken = '';
+    },
+  });
 }
 
 async function submitSignup() {
@@ -218,16 +296,34 @@ async function submitSignup() {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Creating…';
 
+  // CAPTCHA is configured (site key was returned by /api/onboarding/config)
+  // but the user hasn't solved the challenge yet — block the submit with
+  // a helpful message instead of POSTing an empty token and getting
+  // rejected by the back end.
+  if (signupState.turnstileSiteKey && !signupState.turnstileToken) {
+    signupState.submitting = false;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create my workspace';
+    return showSignupError('Please complete the CAPTCHA before submitting.');
+  }
+
   try {
     await api.signup({
       email,
       password: signupState.password,
       app: signupState.app,
       language: signupState.language,
+      captchaToken: signupState.turnstileToken || undefined,
     });
     renderCheckInbox(email);
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : String(err);
+    // Turnstile tokens are single-use — reset the widget so the user can
+    // retry submitting without a page refresh.
+    signupState.turnstileToken = '';
+    if (signupState.turnstileSiteKey && window.turnstile) {
+      window.turnstile.reset();
+    }
     showSignupError(msg);
   } finally {
     signupState.submitting = false;

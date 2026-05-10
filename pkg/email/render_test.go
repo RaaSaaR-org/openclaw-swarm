@@ -123,3 +123,83 @@ func TestRenderMissingDataFieldFails(t *testing.T) {
 		t.Fatal("expected error when data is missing VerifyURL field")
 	}
 }
+
+// TestRenderAllTemplatesBothLangs is the catch-all that proves every shipped
+// (template, lang) pair has subject/html/text files AND that they render with
+// the documented data shape. New templates added to the const list must add a
+// fixture here or the test fails — which is the point.
+func TestRenderAllTemplatesBothLangs(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name Template
+		data any
+	}{
+		{TemplateVerify, struct {
+			Name           string
+			VerifyURL      string
+			ExpiresInHours int
+		}{"Anna", "https://kai.example/v?t=abc", 24}},
+		{TemplateWelcome, struct {
+			Name         string
+			WorkspaceURL string
+		}{"Anna", "https://kai.example/w/anna"}},
+		{TemplateReset, struct {
+			Name           string
+			ResetURL       string
+			ExpiresInHours int
+		}{"Anna", "https://kai.example/reset?t=xyz", 2}},
+		{TemplateBillingReceipt, struct {
+			Name        string
+			PlanName    string
+			Amount      string
+			InvoiceURL  string
+			PeriodStart string
+			PeriodEnd   string
+		}{"Anna", "Starter", "EUR 9.00", "https://kai.example/inv/123.pdf", "2026-05-01", "2026-05-31"}},
+		{TemplatePaymentFailed, struct {
+			Name           string
+			PlanName       string
+			Amount         string
+			RetryURL       string
+			BillingURL     string
+			RetryDate      string
+			AttemptCount   int
+			IsFinalAttempt bool
+		}{"Anna", "Starter", "EUR 9.00", "https://kai.example/billing/retry", "https://kai.example/billing", "2026-05-12", 1, false}},
+		{TemplateUsageWarning, struct {
+			Name          string
+			WorkspaceName string
+			UsedPct       int
+			ResetAt       string
+			UpgradeURL    string
+		}{"Anna", "Inbox", 80, "morgen 02:00 UTC", "https://kai.example/billing"}},
+		{TemplateAccountDeleted, struct {
+			Name              string
+			GraceDays         int
+			RestoreURL        string
+			FinalDeletionDate string
+		}{"Anna", 30, "https://kai.example/restore?t=abc", "2026-06-08"}},
+	}
+
+	for _, tc := range cases {
+		for _, lang := range []Lang{LangDE, LangEN} {
+			subject, html, text, err := Render(tc.name, lang, tc.data)
+			if err != nil {
+				t.Errorf("[%s/%s] render failed: %v", tc.name, lang, err)
+				continue
+			}
+			if strings.TrimSpace(subject) == "" {
+				t.Errorf("[%s/%s] empty subject", tc.name, lang)
+			}
+			if !strings.Contains(html, "<!DOCTYPE html>") {
+				t.Errorf("[%s/%s] html missing doctype", tc.name, lang)
+			}
+			if !strings.Contains(html, "Anna") {
+				t.Errorf("[%s/%s] html missing Name", tc.name, lang)
+			}
+			if !strings.Contains(text, "Anna") {
+				t.Errorf("[%s/%s] text missing Name", tc.name, lang)
+			}
+		}
+	}
+}

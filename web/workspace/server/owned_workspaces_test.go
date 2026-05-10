@@ -22,9 +22,9 @@ import (
 // SetGroupVersionKind / NestedMap dance four times.
 func kaiObj(slug, name, project, userID, appRef string, ready bool) *unstructured.Unstructured {
 	o := &unstructured.Unstructured{}
-	o.SetGroupVersionKind(schema.GroupVersionKind{Group: "swarm.emai.io", Version: "v1alpha1", Kind: "KaiInstance"})
+	o.SetGroupVersionKind(schema.GroupVersionKind{Group: "swarm.emai.io", Version: "v1alpha2", Kind: "KaiInstance"})
 	o.SetName("kai-" + slug)
-	o.SetNamespace("emai-swarm")
+	o.SetNamespace("swarm-system")
 	o.SetLabels(map[string]string{"swarm.io/user-id": userID})
 	spec := map[string]any{
 		"managed":      "saas",
@@ -49,7 +49,7 @@ func kaiObj(slug, name, project, userID, appRef string, ready bool) *unstructure
 // owned-workspaces tests where we need multiple CRs in the same namespace.
 func newFixtureWithKaiObjects(t *testing.T, currentSlug, userID string, kais []*unstructured.Unstructured) *fixture {
 	t.Helper()
-	const ns = "emai-swarm"
+	const ns = "swarm-system"
 
 	scheme := runtime.NewScheme()
 	listKinds := map[schema.GroupVersionResource]string{

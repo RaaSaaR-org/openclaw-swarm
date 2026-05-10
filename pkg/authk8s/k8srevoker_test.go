@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-const ns = "emai-swarm"
+const ns = "swarm-system"
 
 func newRevoker(t *testing.T, slug string, seed []byte, now time.Time) *SecretRevoker {
 	t.Helper()

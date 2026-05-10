@@ -30,8 +30,8 @@ curl -sL https://raw.githubusercontent.com/RaaSaaR-org/openclaw-swarm/main/quick
   | kubectl apply -f -
 
 # 3. Wait and connect
-kubectl -n emai-swarm wait --for=condition=Ready pod -l emai.io/customer=demo --timeout=120s
-kubectl -n emai-swarm port-forward svc/kai-demo 18789:18789
+kubectl -n swarm-system wait --for=condition=Ready pod -l emai.io/customer=demo --timeout=120s
+kubectl -n swarm-system port-forward svc/kai-demo 18789:18789
 # Open http://localhost:18789 (token: demo-token)
 ```
 

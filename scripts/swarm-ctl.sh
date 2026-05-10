@@ -4,7 +4,7 @@ set -euo pipefail
 # swarm-ctl — CLI wrapper for Kira to manage KaiInstance custom resources.
 # Mounted into the Kira pod; uses the pod's ServiceAccount for auth.
 
-NAMESPACE="${SWARM_NAMESPACE:-emai-swarm}"
+NAMESPACE="${SWARM_NAMESPACE:-swarm-system}"
 API_GROUP="swarm.emai.io"
 API_VERSION="v1alpha1"
 RESOURCE="kaiinstances"
@@ -24,7 +24,7 @@ Commands:
   delete     <slug>                               Delete an instance and all its resources
 
 Environment:
-  SWARM_NAMESPACE             Namespace to use (default: emai-swarm)
+  SWARM_NAMESPACE             Namespace to use (default: swarm-system)
   SWARM_PROVISION_TIMEOUT     kubectl wait timeout for provision (default: 300s)
 
 Examples:

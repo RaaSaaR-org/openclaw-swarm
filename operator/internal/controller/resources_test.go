@@ -4,21 +4,21 @@ import (
 	"strings"
 	"testing"
 
-	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func newTestKaiInstance(name, namespace string) *swarmv1alpha1.KaiInstance {
-	return &swarmv1alpha1.KaiInstance{
+func newTestKaiInstance(name, namespace string) *swarmv1alpha2.KaiInstance {
+	return &swarmv1alpha2.KaiInstance{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: swarmv1alpha1.KaiInstanceSpec{
-			CustomerName: "Test Customer",
+		Spec: swarmv1alpha2.KaiInstanceSpec{
+			TenantName: "Test Customer",
 			ProjectName:  "Test Project",
 		},
 	}
@@ -35,7 +35,7 @@ func TestCommonLabels(t *testing.T) {
 
 	expected := map[string]string{
 		"app.kubernetes.io/name":       "kai-test-slug",
-		"app.kubernetes.io/part-of":    "emai-swarm",
+		"app.kubernetes.io/part-of":    "swarm-system",
 		"app.kubernetes.io/managed-by": "swarm-operator",
 		"emai.io/component":            "agent",
 		"emai.io/role":                 "customer",
@@ -52,7 +52,7 @@ func TestCommonLabels(t *testing.T) {
 }
 
 func TestBuildConfigMap(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	tmpl := &renderedTemplates{
 		SoulMD:       "# Soul",
 		AgentsMD:     "# Agents",
@@ -67,8 +67,8 @@ func TestBuildConfigMap(t *testing.T) {
 	if cm.Name != "kai-test-identity" {
 		t.Errorf("ConfigMap name = %q, want 'kai-test-identity'", cm.Name)
 	}
-	if cm.Namespace != "emai-swarm" {
-		t.Errorf("ConfigMap namespace = %q, want 'emai-swarm'", cm.Namespace)
+	if cm.Namespace != "swarm-system" {
+		t.Errorf("ConfigMap namespace = %q, want 'swarm-system'", cm.Namespace)
 	}
 
 	// All template files should be in the ConfigMap
@@ -81,7 +81,7 @@ func TestBuildConfigMap(t *testing.T) {
 }
 
 func TestBuildPVC(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	pvc := buildPVC(kai, "test")
 
 	if pvc.Name != "kai-test-state" {
@@ -97,7 +97,7 @@ func TestBuildPVC(t *testing.T) {
 }
 
 func TestBuildDeployment(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	deploy := buildDeployment(kai, "test", "abc123", deploymentOpts{})
 
 	if deploy.Name != "kai-test" {
@@ -179,7 +179,7 @@ func TestBuildDeployment(t *testing.T) {
 }
 
 func TestBuildDeploymentSuspended(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Suspended = true
 
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
@@ -190,7 +190,7 @@ func TestBuildDeploymentSuspended(t *testing.T) {
 }
 
 func TestBuildDeploymentCustomModel(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Model = "openrouter/anthropic/claude-sonnet"
 
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
@@ -208,7 +208,7 @@ func TestBuildDeploymentCustomModel(t *testing.T) {
 }
 
 func TestBuildDeploymentDefaultModel(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
@@ -224,8 +224,8 @@ func TestBuildDeploymentDefaultModel(t *testing.T) {
 }
 
 func TestBuildDeploymentTelegram(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
-	kai.Spec.Telegram = &swarmv1alpha1.TelegramConfig{
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	kai.Spec.Telegram = &swarmv1alpha2.TelegramConfig{
 		BotTokenSecretRef: "kai-test-telegram",
 	}
 
@@ -263,7 +263,7 @@ func TestCommonLabelsCarriesBothLegacyAndNewTenantLabel(t *testing.T) {
 
 func TestCommonLabelsForOmitsSaaSLabelsWhenSpecFieldsEmpty(t *testing.T) {
 	t.Parallel()
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	got := commonLabelsFor(kai, "test")
 	for _, k := range []string{"swarm.io/user-id", "swarm.io/tier", "swarm.io/app", "swarm.io/org", "swarm.io/managed"} {
 		if _, present := got[k]; present {
@@ -278,7 +278,7 @@ func TestCommonLabelsForOmitsSaaSLabelsWhenSpecFieldsEmpty(t *testing.T) {
 
 func TestCommonLabelsForRendersAllSaaSLabelsWhenSpecFieldsSet(t *testing.T) {
 	t.Parallel()
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.UserRef = "u_01HX3ZQABC"
 	kai.Spec.Tier = "starter"
 	kai.Spec.AppRef = "personal-assistant"
@@ -302,7 +302,7 @@ func TestCommonLabelsForRendersAllSaaSLabelsWhenSpecFieldsSet(t *testing.T) {
 
 func TestBuildDeploymentPropagatesSaaSLabelsToPodTemplate(t *testing.T) {
 	t.Parallel()
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.UserRef = "u_01HX3ZQABC"
 	kai.Spec.Tier = "starter"
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
@@ -317,8 +317,122 @@ func TestBuildDeploymentPropagatesSaaSLabelsToPodTemplate(t *testing.T) {
 	}
 }
 
+// TestBuildDeploymentMultiProvider — TASK-027: when `spec.providers` is
+// non-empty, render one env var per entry as `<UPPER(name)>_API_KEY` from
+// the configured Secret. OPENCLAW_PROVIDER is left unset (OpenClaw
+// auto-detects from model + present API-key env vars).
+func TestBuildDeploymentMultiProvider(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	kai.Spec.Model = "nvidia/nvidia/nemotron-3-super-120b-a12b"
+	kai.Spec.Providers = []swarmv1alpha2.ProviderConfig{
+		{
+			Name: "nvidia",
+			APIKeySecretRef: swarmv1alpha2.ProviderAPIKeySecretRef{
+				Name: "kai-test-nvidia",
+				Key:  "api-key",
+			},
+		},
+		{
+			Name: "openrouter",
+			APIKeySecretRef: swarmv1alpha2.ProviderAPIKeySecretRef{
+				Name: "kai-test-openrouter",
+				// Key omitted → defaults to "api-key"
+			},
+		},
+	}
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	envs := deploy.Spec.Template.Spec.Containers[0].Env
+
+	// Both provider env vars present.
+	nv := envByName(envs, "NVIDIA_API_KEY")
+	if nv == nil {
+		t.Fatalf("NVIDIA_API_KEY missing; got envs %v", envNames(envs))
+	}
+	if nv.ValueFrom.SecretKeyRef.Name != "kai-test-nvidia" {
+		t.Errorf("NVIDIA_API_KEY secret = %q, want kai-test-nvidia", nv.ValueFrom.SecretKeyRef.Name)
+	}
+	if nv.ValueFrom.SecretKeyRef.Key != "api-key" {
+		t.Errorf("NVIDIA_API_KEY key = %q, want api-key", nv.ValueFrom.SecretKeyRef.Key)
+	}
+	or := envByName(envs, "OPENROUTER_API_KEY")
+	if or == nil {
+		t.Fatalf("OPENROUTER_API_KEY missing")
+	}
+	if or.ValueFrom.SecretKeyRef.Key != "api-key" {
+		t.Errorf("default key should be api-key when omitted, got %q", or.ValueFrom.SecretKeyRef.Key)
+	}
+
+	// OPENCLAW_PROVIDER must NOT be set in multi-provider mode — OpenClaw
+	// detects the active provider from OPENCLAW_MODEL + present keys.
+	if envByName(envs, "OPENCLAW_PROVIDER") != nil {
+		t.Errorf("OPENCLAW_PROVIDER must not be set when spec.providers is used")
+	}
+	// Model still propagates.
+	if m := envByName(envs, "OPENCLAW_MODEL"); m == nil || m.Value != "nvidia/nvidia/nemotron-3-super-120b-a12b" {
+		t.Errorf("OPENCLAW_MODEL = %+v, want the spec.model value", m)
+	}
+}
+
+// TestBuildDeploymentMultiProviderCustomKey — a provider entry can name
+// a non-default Secret key (e.g. tenants who reuse one shared Secret with
+// different keys per provider).
+func TestBuildDeploymentMultiProviderCustomKey(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	kai.Spec.Providers = []swarmv1alpha2.ProviderConfig{
+		{
+			Name: "together",
+			APIKeySecretRef: swarmv1alpha2.ProviderAPIKeySecretRef{
+				Name: "shared-llm-keys",
+				Key:  "together-api-key",
+			},
+		},
+	}
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	tg := envByName(deploy.Spec.Template.Spec.Containers[0].Env, "TOGETHER_API_KEY")
+	if tg == nil || tg.ValueFrom.SecretKeyRef.Key != "together-api-key" {
+		t.Errorf("TOGETHER_API_KEY key = %+v, want together-api-key", tg)
+	}
+}
+
+// TestBuildDeploymentLegacyOpenRouterStillWorks — when spec.providers is
+// empty, the old single-provider OpenRouter wiring + OPENCLAW_PROVIDER
+// env var still render. Existing manifests in swarm-emai must keep
+// working without modification.
+func TestBuildDeploymentLegacyOpenRouterStillWorks(t *testing.T) {
+	t.Parallel()
+	kai := newTestKaiInstance("kai-test", "swarm-system")
+	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
+	envs := deploy.Spec.Template.Spec.Containers[0].Env
+
+	if p := envByName(envs, "OPENCLAW_PROVIDER"); p == nil || p.Value != "openrouter" {
+		t.Errorf("legacy path must set OPENCLAW_PROVIDER=openrouter, got %+v", p)
+	}
+	if or := envByName(envs, "OPENROUTER_API_KEY"); or == nil {
+		t.Errorf("legacy path missing OPENROUTER_API_KEY")
+	}
+}
+
+func envByName(envs []corev1.EnvVar, name string) *corev1.EnvVar {
+	for i := range envs {
+		if envs[i].Name == name {
+			return &envs[i]
+		}
+	}
+	return nil
+}
+
+func envNames(envs []corev1.EnvVar) []string {
+	out := make([]string, 0, len(envs))
+	for _, e := range envs {
+		out = append(out, e.Name)
+	}
+	return out
+}
+
 func TestBuildDeploymentOpenRouterDefaultPerSlugSecret(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
 	got := openRouterSecretRef(t, deploy)
@@ -328,7 +442,7 @@ func TestBuildDeploymentOpenRouterDefaultPerSlugSecret(t *testing.T) {
 }
 
 func TestBuildDeploymentOpenRouterPooledSecret(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{PooledOpenRouterSecret: "swarm-pooled-openrouter"})
 
 	got := openRouterSecretRef(t, deploy)
@@ -360,7 +474,7 @@ func openRouterSecretRef(t *testing.T, deploy *appsv1.Deployment) string {
 }
 
 func TestBuildDeploymentNoTelegram(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 
@@ -377,7 +491,7 @@ func TestBuildDeploymentCustomResources(t *testing.T) {
 	// through unchanged. Without a tier, the operator clamps to free
 	// (768Mi limit) — that's the right behavior, but it's covered by a
 	// dedicated clamping test below.
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Tier = "growth"
 	kai.Spec.Resources = &corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -403,7 +517,7 @@ func TestBuildDeploymentClampsResourcesToTierCeiling(t *testing.T) {
 	// (TASK-015 Phase 2) catches this earlier, but the operator clamps too
 	// in case a tenant bypasses the webhook (e.g. cluster admin patches a CR
 	// with kubectl --validate=false).
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Tier = "free"
 	kai.Spec.Resources = &corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
@@ -430,7 +544,7 @@ func TestBuildDeploymentDefaultModelByTier(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.tier, func(t *testing.T) {
-			kai := newTestKaiInstance("kai-test", "emai-swarm")
+			kai := newTestKaiInstance("kai-test", "swarm-system")
 			kai.Spec.Tier = c.tier
 			deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 			for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
@@ -451,7 +565,7 @@ func TestBuildDeploymentSpecModelOverridesTierDefault(t *testing.T) {
 	// Explicit spec.Model always wins over the tier default — operators
 	// running custom models for specific tenants must not be silently
 	// overridden by the tier picker.
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Tier = "free"
 	kai.Spec.Model = "openrouter/anthropic/claude-sonnet"
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
@@ -469,7 +583,7 @@ func TestBuildDeploymentLegacyTenantKeepsLegacyModel(t *testing.T) {
 	t.Parallel()
 	// No tier, no managed → legacy tenant. Must get the operator's hard-coded
 	// defaultModel so existing internal workspaces don't suddenly switch.
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	deploy := buildDeployment(kai, "test", "hash", deploymentOpts{})
 	for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "OPENCLAW_MODEL" {
@@ -486,7 +600,7 @@ func TestBuildDeploymentInternalManagedSkipsClamp(t *testing.T) {
 	// EmAI-internal tenants (managed:internal) are sized by hand by the
 	// platform team — the operator must NOT clamp them to a SaaS tier. This
 	// is the PROP-003 coexistence rule baked into the operator.
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	kai.Spec.Managed = "internal"
 	kai.Spec.Resources = &corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
@@ -502,7 +616,7 @@ func TestBuildDeploymentInternalManagedSkipsClamp(t *testing.T) {
 }
 
 func TestBuildService(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	svc := buildService(kai, "test")
 
 	if svc.Name != "kai-test" {
@@ -517,7 +631,7 @@ func TestBuildService(t *testing.T) {
 }
 
 func TestBuildNetworkPolicy(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	np := buildNetworkPolicy(kai, "test")
 
 	if np.Name != "kai-test-isolation" {
@@ -550,7 +664,7 @@ func TestBuildNetworkPolicy(t *testing.T) {
 }
 
 func TestBuildIngress(t *testing.T) {
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	ing := buildIngress(kai, "test", "kai.emai.dev", "kai-tls", ingressOpts{})
 
 	if ing.Name != "kai-test-ws" {
@@ -576,49 +690,15 @@ func TestBuildIngress(t *testing.T) {
 	}
 }
 
-func TestSpecEffectiveNameAndSlugPrecedence(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name           string
-		spec           swarmv1alpha1.KaiInstanceSpec
-		wantName, wantSlug string
-	}{
-		{
-			"legacy only",
-			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Acme GmbH", CustomerSlug: "acme"},
-			"Acme GmbH", "acme",
-		},
-		{
-			"tenant overrides legacy",
-			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Old Name", CustomerSlug: "old", TenantName: "New Name", TenantSlug: "new"},
-			"New Name", "new",
-		},
-		{
-			"tenant only (legacy unset)",
-			swarmv1alpha1.KaiInstanceSpec{TenantName: "Tenant Alone", TenantSlug: "tenant"},
-			"Tenant Alone", "tenant",
-		},
-		{
-			"mixed: tenant name + legacy slug",
-			swarmv1alpha1.KaiInstanceSpec{CustomerName: "Old", CustomerSlug: "legacy", TenantName: "New"},
-			"New", "legacy",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := c.spec.EffectiveName(); got != c.wantName {
-				t.Errorf("EffectiveName = %q, want %q", got, c.wantName)
-			}
-			if got := c.spec.EffectiveSlug(); got != c.wantSlug {
-				t.Errorf("EffectiveSlug = %q, want %q", got, c.wantSlug)
-			}
-		})
-	}
-}
+// TestSpecEffectiveNameAndSlugPrecedence used to live here on v1alpha1's
+// EffectiveName/EffectiveSlug helpers. v1alpha2 dropped customerName/
+// customerSlug entirely — the equivalent precedence coverage now lives in
+// `api/v1alpha1/kaiinstance_conversion_test.go::TestConvertTo_TenantWinsOverCustomer`,
+// which exercises the same fold-down through the conversion path.
 
 func TestBuildIngressPerSlugSubdomain(t *testing.T) {
 	t.Parallel()
-	kai := newTestKaiInstance("kai-test", "emai-swarm")
+	kai := newTestKaiInstance("kai-test", "swarm-system")
 	ing := buildIngress(kai, "test", "kai.emai.dev", "kai-tls", ingressOpts{PerSlugSubdomain: true})
 
 	// Per-slug mode: host=<slug>.<domain>, path=/ws (no slug in path).
@@ -637,8 +717,8 @@ func TestBuildIngressPerSlugSubdomain(t *testing.T) {
 }
 
 func TestGatewayURL(t *testing.T) {
-	url := gatewayURL("emai-swarm", "east-side-fab")
-	expected := "kai-east-side-fab.emai-swarm.svc:18789"
+	url := gatewayURL("swarm-system", "east-side-fab")
+	expected := "kai-east-side-fab.swarm-system.svc:18789"
 	if url != expected {
 		t.Errorf("gatewayURL = %q, want %q", url, expected)
 	}

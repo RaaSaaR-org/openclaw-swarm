@@ -3,7 +3,10 @@ module github.com/emai-ai/swarm-operator
 go 1.25.3
 
 require (
+	github.com/emai-ai/swarm/pkg/email v0.0.0
+	github.com/emai-ai/swarm/pkg/openrouter v0.0.0
 	github.com/emai-ai/swarm/pkg/quotas v0.0.0
+	github.com/emai-ai/swarm/pkg/users v0.0.0
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
 	k8s.io/api v0.35.0
@@ -12,8 +15,14 @@ require (
 	sigs.k8s.io/controller-runtime v0.23.1
 )
 
-// Sibling pkg/ module in this repo.
+// Sibling pkg/ modules in this repo.
+replace github.com/emai-ai/swarm/pkg/email => ../pkg/email
+
+replace github.com/emai-ai/swarm/pkg/openrouter => ../pkg/openrouter
+
 replace github.com/emai-ai/swarm/pkg/quotas => ../pkg/quotas
+
+replace github.com/emai-ai/swarm/pkg/users => ../pkg/users
 
 require (
 	cel.dev/expr v0.24.0 // indirect

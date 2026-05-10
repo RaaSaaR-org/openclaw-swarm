@@ -1,20 +1,24 @@
-# Onboarding service can create new KaiInstance CRs.
-# It cannot delete or patch existing ones — those go through admin-console / swarm-ctl.
+# Onboarding service + its sibling CronJobs (gdpr-purge, idle-suspend)
+# share this ServiceAccount.
+#  - server: get/list/create KaiInstance (signup-time provisioning).
+#  - idle-suspend (TASK-015 Phase 3): adds patch so the cron can flip
+#    `spec.suspended=true` on free-tier-idle workspaces. The patch verb
+#    is scoped to KaiInstance; it does NOT grant patch on other resources.
+#  - delete still goes through admin-console / swarm-ctl — patch alone
+#    can't drop a workspace.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: onboarding
-  namespace: emai-swarm
 rules:
   - apiGroups: ["swarm.emai.io"]
     resources: ["kaiinstances"]
-    verbs: ["get", "list", "create"]
+    verbs: ["get", "list", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: onboarding
-  namespace: emai-swarm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -22,4 +26,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: onboarding
-    namespace: emai-swarm
+    namespace: swarm-system

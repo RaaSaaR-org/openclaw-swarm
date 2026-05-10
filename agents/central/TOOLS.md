@@ -90,25 +90,25 @@ To approve devices, run these commands inside the Kai pod:
 
 ```bash
 # List pending and paired devices
-kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices list
+kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices list
 
 # Approve the most recent pending device
-kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices approve
+kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices approve
 
 # Approve a specific device by request ID
-kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices approve <requestId>
+kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices approve <requestId>
 
 # Reject a pending request
-kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices reject <requestId>
+kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices reject <requestId>
 
 # Remove a paired device
-kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices remove <deviceId>
+kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices remove <deviceId>
 ```
 
 **Workflow when a user reports they can't connect:**
 1. Ask the user to open the chat URL and wait on the pairing screen
-2. Run `kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices list` to see pending requests
-3. Run `kubectl -n emai-swarm exec deployment/kai-<slug> -c agent -- openclaw devices approve` to approve
+2. Run `kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices list` to see pending requests
+3. Run `kubectl -n swarm-system exec deployment/kai-<slug> -c agent -- openclaw devices approve` to approve
 4. Tell the user to refresh the page
 
 ### Notes

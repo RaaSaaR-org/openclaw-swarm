@@ -142,6 +142,26 @@ func TestMemoryStoreUpdates(t *testing.T) {
 	if got, _ := s.GetByID(context.Background(), u.ID); got.LastLoginAt == nil {
 		t.Errorf("LastLoginAt not stored")
 	}
+
+	bounceAt := time.Unix(1_700_001_000, 0)
+	if err := s.MarkEmailBounced(context.Background(), u.ID, bounceAt); err != nil {
+		t.Fatalf("MarkEmailBounced: %v", err)
+	}
+	if got, _ := s.GetByID(context.Background(), u.ID); got.EmailBouncedAt == nil || !got.EmailBouncedAt.Equal(bounceAt.UTC()) {
+		t.Errorf("EmailBouncedAt not stored: %v", got.EmailBouncedAt)
+	}
+	// Re-marking is idempotent and updates the timestamp (latest bounce).
+	later := bounceAt.Add(time.Hour)
+	if err := s.MarkEmailBounced(context.Background(), u.ID, later); err != nil {
+		t.Fatalf("re-mark: %v", err)
+	}
+	if got, _ := s.GetByID(context.Background(), u.ID); !got.EmailBouncedAt.Equal(later.UTC()) {
+		t.Errorf("re-mark should update timestamp, got %v want %v", got.EmailBouncedAt, later.UTC())
+	}
+	// Unknown user → ErrNotFound.
+	if err := s.MarkEmailBounced(context.Background(), "u_nope", bounceAt); err != ErrNotFound {
+		t.Errorf("unknown user: got %v, want ErrNotFound", err)
+	}
 }
 
 func TestMemoryStoreSoftDelete(t *testing.T) {

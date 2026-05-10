@@ -11,7 +11,7 @@ set -euo pipefail
 # independently; status-page covers the per-tenant gateway-side view.
 
 CONTEXT=""
-NAMESPACE="emai-swarm"
+NAMESPACE="swarm-system"
 OUTPUT="text"
 
 usage() {
@@ -19,7 +19,7 @@ usage() {
 Usage: health-check-k8s.sh [--context <ctx>] [--namespace <ns>] [--output text|json]
 
   --context     kubectl context (default: whatever kubectl is currently bound to)
-  --namespace   K8s namespace to scan (default: emai-swarm)
+  --namespace   K8s namespace to scan (default: swarm-system)
   --output      'text' (human) or 'json' (CI / Prometheus / pipeline)
 
 Exit codes:
@@ -29,7 +29,7 @@ Exit codes:
 
 Examples:
   health-check-k8s.sh
-  health-check-k8s.sh --context emai-cloud --namespace emai-swarm
+  health-check-k8s.sh --context emai-cloud --namespace swarm-system
   health-check-k8s.sh --output json | jq '.instances[] | select(.health != "OK")'
 EOF
     exit 1

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 	"github.com/emai-ai/swarm/pkg/quotas"
 )
 
@@ -41,7 +42,7 @@ import (
 // or explicitly internal-managed tenants — keeps the original 1Gi/2Gi
 // defaults so swarm-emai workspaces don't get silently
 // throttled by a feature they never opted into.
-func isSaaSEnrolled(kai *swarmv1alpha1.KaiInstance) bool {
+func isSaaSEnrolled(kai *swarmv1alpha2.KaiInstance) bool {
 	if kai == nil {
 		return false
 	}
@@ -69,7 +70,7 @@ const (
 func commonLabels(slug string) map[string]string {
 	return map[string]string{
 		"app.kubernetes.io/name":       "kai-" + slug,
-		"app.kubernetes.io/part-of":    "emai-swarm",
+		"app.kubernetes.io/part-of":    "swarm-system",
 		"app.kubernetes.io/managed-by": "swarm-operator",
 		"emai.io/component":            "agent",
 		"emai.io/role":                 "customer",
@@ -82,7 +83,7 @@ func commonLabels(slug string) map[string]string {
 // derived from optional KaiInstance.Spec fields (tier, userRef, org, appRef,
 // managed — added by TASK-012 Phase 2.A). Missing fields skip cleanly so
 // existing tenants (which don't set them) keep their existing label set.
-func commonLabelsFor(kai *swarmv1alpha1.KaiInstance, slug string) map[string]string {
+func commonLabelsFor(kai *swarmv1alpha2.KaiInstance, slug string) map[string]string {
 	l := commonLabels(slug)
 	if kai == nil {
 		return l
@@ -111,7 +112,7 @@ func childName(slug string) string {
 }
 
 // buildConfigMap creates the identity ConfigMap for a KaiInstance.
-func buildConfigMap(kai *swarmv1alpha1.KaiInstance, slug string, tmpl *renderedTemplates) *corev1.ConfigMap {
+func buildConfigMap(kai *swarmv1alpha2.KaiInstance, slug string, tmpl *renderedTemplates) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      childName(slug) + "-identity",
@@ -130,7 +131,7 @@ func buildConfigMap(kai *swarmv1alpha1.KaiInstance, slug string, tmpl *renderedT
 }
 
 // buildPVC creates the persistent volume claim for agent state.
-func buildPVC(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.PersistentVolumeClaim {
+func buildPVC(kai *swarmv1alpha2.KaiInstance, slug string) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      childName(slug) + "-state",
@@ -159,8 +160,63 @@ type deploymentOpts struct {
 	PooledOpenRouterSecret string
 }
 
+// providerEnvVars renders the LLM-provider env block for the agent
+// container (TASK-027). Behavior:
+//
+//   - When `spec.providers` is non-empty, render one env var per entry as
+//     `<UPPER(name)>_API_KEY` from the configured Secret. This is the
+//     multi-provider path (NVIDIA + OpenRouter, Together + Cerebras, etc.).
+//     `OPENCLAW_PROVIDER` is left unset — OpenClaw auto-detects from the
+//     `OPENCLAW_MODEL` prefix and the present API-key env vars.
+//
+//   - When `spec.providers` is empty, fall back to the legacy single-provider
+//     wiring: one `OPENROUTER_API_KEY` from the pooled Secret (when
+//     `opts.PooledOpenRouterSecret` is set) or per-tenant
+//     `kai-<slug>-openrouter` Secret. Sets `OPENCLAW_PROVIDER=openrouter`
+//     so older OpenClaw versions that need the explicit hint keep working.
+//
+// Existing tenants without `spec.providers` see no behavior change.
+func providerEnvVars(kai *swarmv1alpha2.KaiInstance, slug string, opts deploymentOpts) []corev1.EnvVar {
+	if len(kai.Spec.Providers) > 0 {
+		out := make([]corev1.EnvVar, 0, len(kai.Spec.Providers))
+		for _, p := range kai.Spec.Providers {
+			key := p.APIKeySecretRef.Key
+			if key == "" {
+				key = "api-key"
+			}
+			out = append(out, corev1.EnvVar{
+				Name: strings.ToUpper(p.Name) + "_API_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: p.APIKeySecretRef.Name},
+						Key:                  key,
+					},
+				},
+			})
+		}
+		return out
+	}
+	// Legacy path: single OpenRouter wiring.
+	openRouterSecret := opts.PooledOpenRouterSecret
+	if openRouterSecret == "" {
+		openRouterSecret = fmt.Sprintf("kai-%s-openrouter", slug)
+	}
+	return []corev1.EnvVar{
+		{Name: "OPENCLAW_PROVIDER", Value: "openrouter"},
+		{
+			Name: "OPENROUTER_API_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: openRouterSecret},
+					Key:                  "api-key",
+				},
+			},
+		},
+	}
+}
+
 // buildDeployment creates the Deployment for the Kai agent.
-func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts deploymentOpts) *appsv1.Deployment {
+func buildDeployment(kai *swarmv1alpha2.KaiInstance, slug, hash string, opts deploymentOpts) *appsv1.Deployment {
 	labels := commonLabelsFor(kai, slug)
 	name := childName(slug)
 
@@ -187,28 +243,12 @@ func buildDeployment(kai *swarmv1alpha1.KaiInstance, slug, hash string, opts dep
 		model = kai.Spec.Model
 	}
 
-	// OpenRouter key source: pooled (one Secret for all tenants) when configured
-	// via SWARM_POOLED_OPENROUTER_SECRET; otherwise fall back to the per-tenant
-	// `kai-<slug>-openrouter` Secret that onboard.sh historically created.
-	openRouterSecret := opts.PooledOpenRouterSecret
-	if openRouterSecret == "" {
-		openRouterSecret = fmt.Sprintf("kai-%s-openrouter", slug)
-	}
 	env := []corev1.EnvVar{
 		{Name: "NODE_OPTIONS", Value: "--max-old-space-size=1536"},
 		{Name: "OPENCLAW_AGENT", Value: name},
-		{Name: "OPENCLAW_PROVIDER", Value: "openrouter"},
 		{Name: "OPENCLAW_MODEL", Value: model},
-		{
-			Name: "OPENROUTER_API_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: openRouterSecret},
-					Key:                  "api-key",
-				},
-			},
-		},
 	}
+	env = append(env, providerEnvVars(kai, slug, opts)...)
 
 	// Add Telegram bot token if configured
 	if kai.Spec.Telegram != nil && kai.Spec.Telegram.BotTokenSecretRef != "" {
@@ -381,7 +421,7 @@ chown -R 1000:1000 /state`
 }
 
 // buildService creates the ClusterIP Service for the Kai agent gateway.
-func buildService(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Service {
+func buildService(kai *swarmv1alpha2.KaiInstance, slug string) *corev1.Service {
 	name := childName(slug)
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -407,7 +447,7 @@ func buildService(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Service {
 }
 
 // buildNetworkPolicy creates the isolation NetworkPolicy for a customer agent.
-func buildNetworkPolicy(kai *swarmv1alpha1.KaiInstance, slug string) *networkingv1.NetworkPolicy {
+func buildNetworkPolicy(kai *swarmv1alpha2.KaiInstance, slug string) *networkingv1.NetworkPolicy {
 	name := childName(slug)
 	protocol := corev1.ProtocolTCP
 	protocolUDP := corev1.ProtocolUDP
@@ -490,7 +530,7 @@ func externalURL(domain, slug string, opts ingressOpts) string {
 }
 
 // buildIngress creates the Traefik Ingress for external WebSocket access to a Kai agent.
-func buildIngress(kai *swarmv1alpha1.KaiInstance, slug, domain, tlsSecret string, opts ingressOpts) *networkingv1.Ingress {
+func buildIngress(kai *swarmv1alpha2.KaiInstance, slug, domain, tlsSecret string, opts ingressOpts) *networkingv1.Ingress {
 	name := childName(slug)
 	pathType := networkingv1.PathTypePrefix
 	ingressClass := "traefik"

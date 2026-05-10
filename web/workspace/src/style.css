@@ -2103,3 +2103,180 @@ code {
 .workspace-card-slug {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
+
+/* ---- Switch persona (TASK-018 Phase 4) ---- */
+
+.switch-app-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border-top: 1px solid var(--hairline, #2a2a2a);
+  font-size: 13px;
+}
+
+.switch-app-toggle,
+.switch-app-save,
+.switch-app-cancel {
+  background: transparent;
+  border: 1px solid var(--hairline, #2a2a2a);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text, #eee);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.switch-app-toggle:hover,
+.switch-app-cancel:hover {
+  border-color: var(--accent, #FF6700);
+  color: var(--accent, #FF6700);
+}
+
+.switch-app-save {
+  background: var(--accent, #FF6700);
+  color: #fff;
+  border-color: var(--accent, #FF6700);
+}
+
+.switch-app-save:hover {
+  filter: brightness(1.1);
+}
+
+.switch-app-save:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.switch-app-region {
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--hairline, #2a2a2a);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.switch-app-label {
+  font-size: 13px;
+  color: var(--text, #eee);
+  font-weight: 500;
+}
+
+.switch-app-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.switch-app-select {
+  flex: 1 1 200px;
+  background: var(--bg, #141414);
+  color: var(--text, #eee);
+  border: 1px solid var(--hairline, #2a2a2a);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.switch-app-warning {
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.switch-app-feedback {
+  font-size: 12px;
+}
+
+.switch-app-ok {
+  color: var(--success, #4ade80);
+}
+
+.switch-app-err {
+  color: var(--danger, #f87171);
+}
+
+/* ---- Danger zone (TASK-021 Phase 1 — account deletion) ---- */
+
+.danger-zone {
+  margin-top: 32px;
+  padding: 20px 24px;
+  border: 1px solid var(--danger, #f87171);
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.04);
+}
+
+.danger-zone h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--danger, #f87171);
+  font-weight: 600;
+}
+
+.danger-zone p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.danger-zone-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.danger-btn {
+  background: transparent;
+  border: 1px solid var(--danger, #f87171);
+  color: var(--danger, #f87171);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: var(--danger, #f87171);
+  color: var(--bg, #141414);
+}
+
+.danger-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.billing-zone {
+  margin-top: 32px;
+  padding: 20px 24px;
+  border: 1px solid rgba(255, 103, 0, 0.4);
+  border-radius: 6px;
+  background: rgba(255, 103, 0, 0.04);
+}
+
+.billing-zone h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--accent, #FF6700);
+  font-weight: 600;
+}
+
+.billing-zone p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.billing-zone-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}

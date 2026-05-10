@@ -5,20 +5,32 @@ go 1.25.3
 require (
 	github.com/emai-ai/swarm/pkg/auth v0.0.0
 	github.com/emai-ai/swarm/pkg/authk8s v0.0.0
+	github.com/emai-ai/swarm/pkg/email v0.0.0
+	github.com/emai-ai/swarm/pkg/stripe v0.0.0
 	github.com/emai-ai/swarm/pkg/users v0.0.0
+	github.com/emai-ai/swarm/pkg/userspg v0.0.0
+	github.com/jackc/pgx/v5 v5.7.6
+	github.com/stripe/stripe-go/v82 v82.4.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
+	sigs.k8s.io/yaml v1.6.0
 )
 
-// pkg/auth + pkg/authk8s + pkg/users are sibling modules in this repo; resolve
-// via local replace so the Docker build (with repo root as context) can find
-// them without a published version.
+// pkg/auth + pkg/authk8s + pkg/email + pkg/stripe + pkg/users are sibling
+// modules in this repo; resolve via local replace so the Docker build
+// (with repo root as context) can find them without a published version.
 replace github.com/emai-ai/swarm/pkg/auth => ../../../pkg/auth
 
 replace github.com/emai-ai/swarm/pkg/authk8s => ../../../pkg/authk8s
 
+replace github.com/emai-ai/swarm/pkg/email => ../../../pkg/email
+
+replace github.com/emai-ai/swarm/pkg/stripe => ../../../pkg/stripe
+
 replace github.com/emai-ai/swarm/pkg/users => ../../../pkg/users
+
+replace github.com/emai-ai/swarm/pkg/userspg => ../../../pkg/userspg
 
 require golang.org/x/crypto v0.50.0 // indirect
 
@@ -32,6 +44,9 @@ require (
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -44,6 +59,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
@@ -58,5 +74,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )

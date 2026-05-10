@@ -71,6 +71,11 @@ export interface SignupResponse {
   status: 'verification_sent';
 }
 
+export interface OnboardingConfig {
+  signupEnabled: boolean;
+  turnstileSiteKey?: string;
+}
+
 export interface VerifyResponse {
   status: 'verified';
   workspace?: string;
@@ -103,6 +108,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+  config: () => publicRequest<OnboardingConfig>('/api/onboarding/config'),
   verify: (id: string, token: string) => {
     const qs = new URLSearchParams({ id, token }).toString();
     return publicRequest<VerifyResponse>(`/api/signup/verify?${qs}`);
@@ -142,7 +148,7 @@ export function renderYaml(req: ProvisionRequest, namespace: string): string {
   const indent = (n: number) => ' '.repeat(n);
   const name = `kai-${req.customerSlug || '<slug>'}`;
   const lines: string[] = [
-    'apiVersion: swarm.emai.io/v1alpha1',
+    'apiVersion: swarm.emai.io/v1alpha2',
     'kind: KaiInstance',
     'metadata:',
     `${indent(2)}name: ${name}`,

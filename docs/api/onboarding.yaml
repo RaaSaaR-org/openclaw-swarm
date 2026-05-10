@@ -49,7 +49,7 @@ paths:
                 type: object
                 required: [namespace]
                 properties:
-                  namespace: { type: string, example: emai-swarm }
+                  namespace: { type: string, example: swarm-system }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/instances:
@@ -129,7 +129,7 @@ components:
       required: [name, namespace, customerSlug, gatewayToken]
       properties:
         name: { type: string, example: kai-acme }
-        namespace: { type: string, example: emai-swarm }
+        namespace: { type: string, example: swarm-system }
         customerSlug: { type: string, example: acme }
         gatewayToken:
           type: string

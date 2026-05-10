@@ -40,7 +40,7 @@ type server struct {
 
 func main() {
 	addr := envDefault("ADDR", ":8080")
-	namespace := envDefault("SWARM_NAMESPACE", "emai-swarm")
+	namespace := envDefault("SWARM_NAMESPACE", "swarm-system")
 
 	s := &server{
 		namespace: namespace,

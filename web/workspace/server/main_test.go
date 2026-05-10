@@ -40,7 +40,7 @@ func newFixture(t *testing.T, slug string, recs []userRecord) *fixture {
 // legacy branch (managed=internal or empty) without touching auth.go.
 func newFixtureWithBinding(t *testing.T, slug string, recs []userRecord, managed, userRef string) *fixture {
 	t.Helper()
-	const ns = "emai-swarm"
+	const ns = "swarm-system"
 
 	// Dynamic client seeded with a KaiInstance — the auth path now reads
 	// spec.managed + spec.userRef to pick the SaaS-vs-legacy login branch.
@@ -49,7 +49,7 @@ func newFixtureWithBinding(t *testing.T, slug string, recs []userRecord, managed
 		kaiInstanceGVR: "KaiInstanceList",
 	}
 	kai := &unstructured.Unstructured{}
-	kai.SetGroupVersionKind(schema.GroupVersionKind{Group: "swarm.emai.io", Version: "v1alpha1", Kind: "KaiInstance"})
+	kai.SetGroupVersionKind(schema.GroupVersionKind{Group: "swarm.emai.io", Version: "v1alpha2", Kind: "KaiInstance"})
 	kai.SetName("kai-" + slug)
 	kai.SetNamespace(ns)
 	spec := map[string]any{}
@@ -297,6 +297,72 @@ func TestHandleAuthInfo_AuthedSession(t *testing.T) {
 	_ = json.Unmarshal(rr.Body.Bytes(), &body)
 	if body["authenticated"] != true || body["email"] != "alice@acme.de" {
 		t.Errorf("expected authed, got %v", body)
+	}
+}
+
+func TestHandleForwardAuth_AuthedReturns204(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+	cookie, err := pkgauth.IssueSession("acme", "alice@acme.de", f.jwtSecret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := slugReq(http.MethodGet, "/api/workspace/acme/forward-auth", "acme", "")
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if got := rr.Header().Get("X-Auth-Email"); got != "alice@acme.de" {
+		t.Errorf("expected X-Auth-Email=alice@acme.de, got %q", got)
+	}
+}
+
+func TestHandleForwardAuth_UnauthedRedirectsToLogin(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+	req := slugReq(http.MethodGet, "/api/workspace/acme/forward-auth", "acme", "")
+	req.Header.Set("X-Forwarded-Uri", "/hq/acme/tasks")
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/workspace/acme/") {
+		t.Errorf("expected redirect to /workspace/acme/, got %q", loc)
+	}
+	if !strings.Contains(loc, "return=") {
+		t.Errorf("expected return query param, got %q", loc)
+	}
+}
+
+func TestHandleForwardAuth_WrongSlugRedirects(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+	// Cookie issued for "acme" but request is for "other" — must be rejected.
+	cookie, err := pkgauth.IssueSession("acme", "alice@acme.de", f.jwtSecret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := slugReq(http.MethodGet, "/api/workspace/other/forward-auth", "other", "")
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 for cross-slug cookie, got %d", rr.Code)
+	}
+}
+
+func TestHandleForwardAuth_BadSlug400(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "acme", nil)
+	req := slugReq(http.MethodGet, "/api/workspace/BAD_SLUG/forward-auth", "BAD_SLUG", "")
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 

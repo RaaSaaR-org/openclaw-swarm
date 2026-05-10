@@ -27,7 +27,7 @@ func fakeServer(t *testing.T, token string, items ...*unstructured.Unstructured)
 		objs = append(objs, it)
 	}
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objs...)
-	return &server{dyn: dyn, namespace: "emai-swarm", token: token}
+	return &server{dyn: dyn, namespace: "swarm-system", token: token}
 }
 
 func newReq(method, path, token, body string) *http.Request {
@@ -95,7 +95,7 @@ func TestCreateInstance_HappyPath(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Name != "kai-acme" || resp.CustomerSlug != "acme" || resp.Namespace != "emai-swarm" {
+	if resp.Name != "kai-acme" || resp.CustomerSlug != "acme" || resp.Namespace != "swarm-system" {
 		t.Errorf("unexpected response: %+v", resp)
 	}
 	if len(resp.GatewayToken) != 48 { // 24 random bytes hex-encoded → 48 chars
@@ -121,7 +121,7 @@ func TestCreateInstance_HappyPath_WithOptionalFields(t *testing.T) {
 	}
 
 	// Read it back via the fake client to confirm the optional fields landed.
-	got, err := s.dyn.Resource(kaiInstanceGVR).Namespace("emai-swarm").Get(context.Background(), "kai-beta", metav1.GetOptions{})
+	got, err := s.dyn.Resource(kaiInstanceGVR).Namespace("swarm-system").Get(context.Background(), "kai-beta", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("read-back failed: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestCreateInstance_BadJSON_400(t *testing.T) {
 func TestCreateInstance_DuplicateSlug_409(t *testing.T) {
 	t.Parallel()
 	existing := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      "kai-acme",
-			"namespace": "emai-swarm",
+			"namespace": "swarm-system",
 		},
 		"spec": map[string]any{
 			"customerName": "Acme",
@@ -175,7 +175,7 @@ func TestCreateInstance_DuplicateSlug_409(t *testing.T) {
 
 func TestCreateInstance_NoDynClient_503(t *testing.T) {
 	t.Parallel()
-	s := &server{namespace: "emai-swarm", token: "tok"}
+	s := &server{namespace: "swarm-system", token: "tok"}
 	body := `{"customerName":"Acme","projectName":"P","customerSlug":"acme"}`
 	rr := httptest.NewRecorder()
 	s.createInstance(rr, newReq(http.MethodPost, "/api/instances", "tok", body))

@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -35,7 +36,7 @@ var webFS embed.FS
 var (
 	kaiInstanceGVR = schema.GroupVersionResource{
 		Group:    "swarm.emai.io",
-		Version:  "v1alpha1",
+		Version:  "v1alpha2",
 		Resource: "kaiinstances",
 	}
 	slugRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -43,15 +44,18 @@ var (
 
 type server struct {
 	dyn       dynamic.Interface
+	core      kubernetes.Interface // typed client for Secret writes (per-workspace OpenRouter key)
 	namespace string
 	token     string
 
 	// SaaS signup flow (TASK-013). Optional — Enabled=false in signup keeps
 	// the onboarding pod identical to its pre-signup behavior.
-	users  users.Store
-	email  email.Sender
-	signup signupConfig
-	rl     *rateLimiter
+	users        users.Store
+	email        email.Sender
+	signup       signupConfig
+	rl           *rateLimiter
+	keyMinter    keyProvisioner     // TASK-019 Phase 2.B; nil disables per-workspace key minting
+	emailWebhook emailWebhookConfig // TASK-020 Phase 4; empty Secret disables /api/email/webhook (returns 503)
 }
 
 type provisionRequest struct {
@@ -72,7 +76,7 @@ type provisionResponse struct {
 
 func main() {
 	addr := envDefault("ADDR", ":8080")
-	namespace := envDefault("SWARM_NAMESPACE", "emai-swarm")
+	namespace := envDefault("SWARM_NAMESPACE", "swarm-system")
 	token := os.Getenv("ADMIN_TOKEN")
 	if token == "" {
 		log.Fatal("ADMIN_TOKEN must be set")
@@ -81,10 +85,17 @@ func main() {
 	s := &server{namespace: namespace, token: token}
 	if cfg, err := loadKubeConfig(); err != nil {
 		log.Printf("warning: no kubeconfig available (%v) — API calls will fail until creds are present", err)
-	} else if dyn, err := dynamic.NewForConfig(cfg); err != nil {
-		log.Printf("warning: dynamic client init failed: %v", err)
 	} else {
-		s.dyn = dyn
+		if dyn, err := dynamic.NewForConfig(cfg); err != nil {
+			log.Printf("warning: dynamic client init failed: %v", err)
+		} else {
+			s.dyn = dyn
+		}
+		if core, err := kubernetes.NewForConfig(cfg); err != nil {
+			log.Printf("warning: core client init failed: %v", err)
+		} else {
+			s.core = core
+		}
 	}
 
 	if err := s.setupSignup(); err != nil {
@@ -99,8 +110,10 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"namespace": s.namespace})
 	}))
 	mux.HandleFunc("POST /api/instances", s.requireAuth(s.createInstance))
+	mux.HandleFunc("GET /api/onboarding/config", s.handleOnboardingConfig)
 	mux.HandleFunc("POST /api/signup", s.handleSignup)
 	mux.HandleFunc("GET /api/signup/verify", s.handleVerify)
+	mux.HandleFunc("POST /api/email/webhook", s.handleEmailWebhook)
 
 	staticFS, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -134,12 +147,23 @@ func (s *server) setupSignup() error {
 		return nil
 	}
 
-	// Users store: MemoryStore for dev / single-process; production overlays
-	// should construct a pkg/userspg.PoolStore and inject via a code change
-	// (kept out of this commit so the public swarm repo doesn't pull pgx
-	// into the onboarding binary by default).
-	s.users = users.NewMemoryStore()
-	log.Printf("signup: using in-memory user store (Phase 0 — Postgres wiring lands with the swarm-cloud overlay)")
+	// Users store: MemoryStore by default; opt in to Postgres-backed PoolStore
+	// by setting `KAI_USERS_DSN`. The shared store is what lets onboarding
+	// (signup) and workspace (login + dashboard) see the same user — both
+	// services point at the same database in production. The public binary
+	// pulls pgx as a hard dep; deployments that want pure-memory ignore the
+	// env var.
+	if dsn := os.Getenv("KAI_USERS_DSN"); dsn != "" {
+		store, err := newPoolStore(dsn)
+		if err != nil {
+			return fmt.Errorf("postgres user store: %w", err)
+		}
+		s.users = store
+		log.Printf("signup: using Postgres user store (KAI_USERS_DSN set)")
+	} else {
+		s.users = users.NewMemoryStore()
+		log.Printf("signup: using in-memory user store (set KAI_USERS_DSN to use Postgres)")
+	}
 
 	// Email sender: DiskSender by default; switch to Resend by setting
 	// EMAIL_PROVIDER=resend + RESEND_API_KEY (Phase 1 wiring — for now both
@@ -169,7 +193,35 @@ func (s *server) setupSignup() error {
 	s.signup.VerifyTTL = 24 * time.Hour
 	s.signup.From = os.Getenv("EMAIL_FROM") // pkg/email falls back to its own default if empty
 	s.signup.IPLimitPerHr = 5
-	s.signup.Captcha = noopCaptcha{}
+	if secret := os.Getenv("TURNSTILE_SECRET_KEY"); secret != "" {
+		s.signup.Captcha = newTurnstileCaptcha(secret)
+		// The PUBLIC site key (a different Cloudflare-issued string) is
+		// surfaced through /api/onboarding/config so the SPA can mount the
+		// cf-turnstile widget. Both keys come from the same Turnstile
+		// dashboard entry; production deploys must set both env vars.
+		s.signup.TurnstilePublicSiteKey = os.Getenv("TURNSTILE_SITE_KEY")
+		if s.signup.TurnstilePublicSiteKey == "" {
+			log.Printf("signup: TURNSTILE_SECRET_KEY set but TURNSTILE_SITE_KEY missing — SPA widget will not render; the server will still verify tokens posted via the API")
+		} else {
+			log.Printf("signup: Cloudflare Turnstile CAPTCHA enabled (site-key configured for SPA widget)")
+		}
+	} else {
+		s.signup.Captcha = noopCaptcha{}
+		log.Printf("signup: no CAPTCHA configured — set TURNSTILE_SECRET_KEY + TURNSTILE_SITE_KEY to enable Cloudflare Turnstile")
+	}
+	s.keyMinter = resolveKeyProvisioner(os.Getenv("OPENROUTER_PROVISIONING_KEY"))
+
+	// TASK-020 Phase 4: Resend bounce-webhook secret. Empty / unconfigured
+	// → /api/email/webhook returns 503 so an enabled-but-unconfigured deploy
+	// fails loudly instead of silently accepting unsigned webhooks.
+	if secret, err := loadResendSecret(os.Getenv("RESEND_WEBHOOK_SECRET")); err != nil {
+		log.Printf("signup: RESEND_WEBHOOK_SECRET rejected (%v); /api/email/webhook will return 503", err)
+	} else if secret != nil {
+		s.emailWebhook = emailWebhookConfig{Secret: secret, Tolerance: 5 * time.Minute}
+		log.Printf("signup: Resend webhook receiver enabled at /api/email/webhook")
+	} else {
+		log.Printf("signup: no RESEND_WEBHOOK_SECRET set — /api/email/webhook will return 503")
+	}
 	s.rl = newRateLimiter(s.signup.IPLimitPerHr)
 	return nil
 }
@@ -256,7 +308,7 @@ func (s *server) createInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	obj := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      name,

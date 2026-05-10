@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 )
 
 // KaiInstanceReconciler reconciles a KaiInstance object.
@@ -82,7 +82,7 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log := logf.FromContext(ctx)
 
 	// 1. Fetch the KaiInstance CR
-	var kai swarmv1alpha1.KaiInstance
+	var kai swarmv1alpha2.KaiInstance
 	if err := r.Get(ctx, req.NamespacedName, &kai); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil // Deleted, ownerRef cascade handles cleanup
@@ -95,9 +95,9 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Today cleanup is a no-op (ownerRef cascade does the work); the hook reserves
 	// space for future SaaS pre-delete logic (GDPR DSAR snapshot, billing, audit).
 	if !kai.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer) {
+		if controllerutil.ContainsFinalizer(&kai, swarmv1alpha2.KaiInstanceFinalizer) {
 			log.Info("finalizing KaiInstance", "name", kai.Name)
-			controllerutil.RemoveFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)
+			controllerutil.RemoveFinalizer(&kai, swarmv1alpha2.KaiInstanceFinalizer)
 			if err := r.Update(ctx, &kai); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -107,8 +107,8 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// 3. Ensure the finalizer is present. Re-queue immediately after adding it so
 	// the next reconcile sees the updated object and proceeds with provisioning.
-	if !controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer) {
-		controllerutil.AddFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)
+	if !controllerutil.ContainsFinalizer(&kai, swarmv1alpha2.KaiInstanceFinalizer) {
+		controllerutil.AddFinalizer(&kai, swarmv1alpha2.KaiInstanceFinalizer)
 		if err := r.Update(ctx, &kai); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -121,14 +121,14 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// helpers route through the tenant-* fields first so the public swarm
 	// repo's code path is tenant-clean even though v1alpha1 still carries
 	// the legacy customer-* fields for backwards compat.
-	slug := kai.Spec.EffectiveSlug()
+	slug := kai.Spec.TenantSlug
 	if slug == "" {
-		slug = slugify(kai.Spec.EffectiveName())
+		slug = slugify(kai.Spec.TenantName)
 	}
 
 	// Persist slug in status so it's stable
-	if kai.Status.CustomerSlug != slug {
-		kai.Status.CustomerSlug = slug
+	if kai.Status.TenantSlug != slug {
+		kai.Status.TenantSlug = slug
 	}
 
 	log.Info("reconciling KaiInstance", "slug", slug, "suspended", kai.Spec.Suspended)
@@ -142,8 +142,8 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// 4. Set phase to Provisioning if not yet Running
-	if kai.Status.Phase != swarmv1alpha1.PhaseRunning {
-		kai.Status.Phase = swarmv1alpha1.PhaseProvisioning
+	if kai.Status.Phase != swarmv1alpha2.PhaseRunning {
+		kai.Status.Phase = swarmv1alpha2.PhaseProvisioning
 	}
 
 	// 5. Render templates
@@ -152,7 +152,7 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		model = kai.Spec.Model
 	}
 	tmpl, err := renderAllTemplates(templateVars{
-		TenantName:  kai.Spec.EffectiveName(),
+		TenantName:  kai.Spec.TenantName,
 		TenantSlug:  slug,
 		ProjectName: kai.Spec.ProjectName,
 	}, templateOpts{
@@ -195,13 +195,23 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	ready := r.isDeploymentReady(ctx, kai.Namespace, slug)
 	kai.Status.Ready = ready
 	kai.Status.GatewayURL = gatewayURL(kai.Namespace, slug)
-	if kai.Spec.ExternalAccess == nil || *kai.Spec.ExternalAccess {
+	// ExternalURL is gated on Ingress admission (TASK-017 Phase 2): the
+	// ingress controller has populated `status.loadBalancer.ingress` so
+	// the URL we publish is one the LB can actually route. While the LB
+	// is still admitting we leave ExternalURL empty so consumers don't
+	// hand users an address mid-cold-start.
+	externalAccessEnabled := kai.Spec.ExternalAccess == nil || *kai.Spec.ExternalAccess
+	if externalAccessEnabled && r.isIngressAdmitted(ctx, kai.Namespace, slug) {
 		kai.Status.ExternalURL = externalURL(r.IngressDomain, slug, ingressOpts{PerSlugSubdomain: r.PerSlugSubdomain})
+		r.setCondition(&kai, swarmv1alpha2.ConditionIngressReady, metav1.ConditionTrue, "Admitted", "Ingress admitted by controller")
 	} else {
 		kai.Status.ExternalURL = ""
+		if externalAccessEnabled {
+			r.setCondition(&kai, swarmv1alpha2.ConditionIngressReady, metav1.ConditionFalse, "Pending", "Waiting for ingress controller to admit the resource")
+		}
 	}
 	if ready {
-		kai.Status.Phase = swarmv1alpha1.PhaseRunning
+		kai.Status.Phase = swarmv1alpha2.PhaseRunning
 	}
 
 	// 8. Mark this generation as fully observed (only on the successful path —
@@ -219,7 +229,7 @@ func (r *KaiInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // reconcileSuspended scales the deployment to 0 and updates status.
-func (r *KaiInstanceReconciler) reconcileSuspended(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileSuspended(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	// Try to scale down the deployment if it exists
 	var deploy appsv1.Deployment
 	err := r.Get(ctx, types.NamespacedName{Name: childName(slug), Namespace: kai.Namespace}, &deploy)
@@ -233,13 +243,13 @@ func (r *KaiInstanceReconciler) reconcileSuspended(ctx context.Context, kai *swa
 		}
 	}
 
-	kai.Status.Phase = swarmv1alpha1.PhaseSuspended
+	kai.Status.Phase = swarmv1alpha2.PhaseSuspended
 	kai.Status.Ready = false
 	return r.Status().Update(ctx, kai)
 }
 
 // reconcileConfigMap creates or updates the identity ConfigMap.
-func (r *KaiInstanceReconciler) reconcileConfigMap(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string, tmpl *renderedTemplates) error {
+func (r *KaiInstanceReconciler) reconcileConfigMap(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string, tmpl *renderedTemplates) error {
 	desired := buildConfigMap(kai, slug, tmpl)
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -248,7 +258,7 @@ func (r *KaiInstanceReconciler) reconcileConfigMap(ctx context.Context, kai *swa
 	var existing corev1.ConfigMap
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
-		r.setCondition(kai, swarmv1alpha1.ConditionConfigMapReady, metav1.ConditionTrue, "Created", "ConfigMap created")
+		r.setCondition(kai, swarmv1alpha2.ConditionConfigMapReady, metav1.ConditionTrue, "Created", "ConfigMap created")
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
@@ -257,12 +267,12 @@ func (r *KaiInstanceReconciler) reconcileConfigMap(ctx context.Context, kai *swa
 
 	existing.Data = desired.Data
 	existing.Labels = desired.Labels
-	r.setCondition(kai, swarmv1alpha1.ConditionConfigMapReady, metav1.ConditionTrue, "Updated", "ConfigMap up to date")
+	r.setCondition(kai, swarmv1alpha2.ConditionConfigMapReady, metav1.ConditionTrue, "Updated", "ConfigMap up to date")
 	return r.Update(ctx, &existing)
 }
 
 // reconcilePVC creates the PVC if it doesn't exist (PVCs are immutable after creation).
-func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	desired := buildPVC(kai, slug)
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -271,7 +281,7 @@ func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1al
 	var existing corev1.PersistentVolumeClaim
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
-		r.setCondition(kai, swarmv1alpha1.ConditionPVCBound, metav1.ConditionFalse, "Creating", "PVC created, waiting for bind")
+		r.setCondition(kai, swarmv1alpha2.ConditionPVCBound, metav1.ConditionFalse, "Creating", "PVC created, waiting for bind")
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
@@ -280,13 +290,13 @@ func (r *KaiInstanceReconciler) reconcilePVC(ctx context.Context, kai *swarmv1al
 
 	// PVC exists, check if bound
 	if existing.Status.Phase == corev1.ClaimBound {
-		r.setCondition(kai, swarmv1alpha1.ConditionPVCBound, metav1.ConditionTrue, "Bound", "PVC is bound")
+		r.setCondition(kai, swarmv1alpha2.ConditionPVCBound, metav1.ConditionTrue, "Bound", "PVC is bound")
 	}
 	return nil
 }
 
 // reconcileDeployment creates or updates the agent Deployment.
-func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug, hash string) error {
+func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug, hash string) error {
 	desired := buildDeployment(kai, slug, hash, deploymentOpts{PooledOpenRouterSecret: r.PooledOpenRouterSecret})
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -295,7 +305,7 @@ func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *sw
 	var existing appsv1.Deployment
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
-		r.setCondition(kai, swarmv1alpha1.ConditionDeploymentAvailable, metav1.ConditionFalse, "Creating", "Deployment created")
+		r.setCondition(kai, swarmv1alpha2.ConditionDeploymentAvailable, metav1.ConditionFalse, "Creating", "Deployment created")
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
@@ -309,7 +319,7 @@ func (r *KaiInstanceReconciler) reconcileDeployment(ctx context.Context, kai *sw
 }
 
 // reconcileService creates or updates the ClusterIP Service.
-func (r *KaiInstanceReconciler) reconcileService(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileService(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	desired := buildService(kai, slug)
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -332,7 +342,7 @@ func (r *KaiInstanceReconciler) reconcileService(ctx context.Context, kai *swarm
 }
 
 // reconcileIngress creates, updates, or deletes the external access Ingress.
-func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	ingressName := childName(slug) + "-ws"
 
 	// If external access is explicitly disabled, delete existing Ingress if present
@@ -356,7 +366,11 @@ func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarm
 	var existing networkingv1.Ingress
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
-		r.setCondition(kai, swarmv1alpha1.ConditionIngressReady, metav1.ConditionTrue, "Created", "Ingress created")
+		// ConditionIngressReady stays False until isIngressAdmitted() reports
+		// the controller has populated `status.loadBalancer.ingress` —
+		// shipping `ExternalURL` while the LB is still booting would point
+		// users at an address that doesn't resolve yet (TASK-017 Phase 2).
+		r.setCondition(kai, swarmv1alpha2.ConditionIngressReady, metav1.ConditionFalse, "Pending", "Ingress created, waiting for controller admission")
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
@@ -366,12 +380,35 @@ func (r *KaiInstanceReconciler) reconcileIngress(ctx context.Context, kai *swarm
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 	existing.Annotations = desired.Annotations
-	r.setCondition(kai, swarmv1alpha1.ConditionIngressReady, metav1.ConditionTrue, "Updated", "Ingress up to date")
 	return r.Update(ctx, &existing)
 }
 
+// isIngressAdmitted reports whether the per-slug Ingress has been picked
+// up by the cluster's ingress controller. Standard signal: the controller
+// fills in `Ingress.Status.LoadBalancer.Ingress[]` once it has assigned
+// the resource a routable address. Empty list = controller hasn't seen
+// it yet; non-empty = ready to serve traffic.
+//
+// This is the gate for `kai.Status.ExternalURL` (TASK-017 Phase 2):
+// publishing a URL the LB can't yet route would link users into a
+// connection-refused / NXDOMAIN window during the cold-start race.
+func (r *KaiInstanceReconciler) isIngressAdmitted(ctx context.Context, namespace, slug string) bool {
+	if r.IngressDomain == "" {
+		// No ingress domain configured → no LB → no admission to wait for.
+		// The reconcile path skips Ingress creation entirely; ExternalURL
+		// stays empty, which matches the "external access disabled" branch.
+		return false
+	}
+	var ing networkingv1.Ingress
+	err := r.Get(ctx, types.NamespacedName{Name: childName(slug) + "-ws", Namespace: namespace}, &ing)
+	if err != nil {
+		return false
+	}
+	return len(ing.Status.LoadBalancer.Ingress) > 0
+}
+
 // reconcileNetworkPolicy creates or updates the isolation NetworkPolicy.
-func (r *KaiInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	desired := buildNetworkPolicy(kai, slug)
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -380,7 +417,7 @@ func (r *KaiInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, kai 
 	var existing networkingv1.NetworkPolicy
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
-		r.setCondition(kai, swarmv1alpha1.ConditionNetworkPolicyApplied, metav1.ConditionTrue, "Created", "NetworkPolicy created")
+		r.setCondition(kai, swarmv1alpha2.ConditionNetworkPolicyApplied, metav1.ConditionTrue, "Created", "NetworkPolicy created")
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
@@ -389,7 +426,7 @@ func (r *KaiInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, kai 
 
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
-	r.setCondition(kai, swarmv1alpha1.ConditionNetworkPolicyApplied, metav1.ConditionTrue, "Updated", "NetworkPolicy up to date")
+	r.setCondition(kai, swarmv1alpha2.ConditionNetworkPolicyApplied, metav1.ConditionTrue, "Updated", "NetworkPolicy up to date")
 	return r.Update(ctx, &existing)
 }
 
@@ -404,8 +441,8 @@ func (r *KaiInstanceReconciler) isDeploymentReady(ctx context.Context, namespace
 }
 
 // setFailed updates the phase to Failed and returns the original error.
-func (r *KaiInstanceReconciler) setFailed(ctx context.Context, kai *swarmv1alpha1.KaiInstance, reason string, err error) error {
-	kai.Status.Phase = swarmv1alpha1.PhaseFailed
+func (r *KaiInstanceReconciler) setFailed(ctx context.Context, kai *swarmv1alpha2.KaiInstance, reason string, err error) error {
+	kai.Status.Phase = swarmv1alpha2.PhaseFailed
 	kai.Status.Ready = false
 	r.setCondition(kai, "Ready", metav1.ConditionFalse, reason, err.Error())
 	if statusErr := r.Status().Update(ctx, kai); statusErr != nil {
@@ -415,7 +452,7 @@ func (r *KaiInstanceReconciler) setFailed(ctx context.Context, kai *swarmv1alpha
 }
 
 // setCondition sets a condition on the KaiInstance status.
-func (r *KaiInstanceReconciler) setCondition(kai *swarmv1alpha1.KaiInstance, condType string, status metav1.ConditionStatus, reason, message string) {
+func (r *KaiInstanceReconciler) setCondition(kai *swarmv1alpha2.KaiInstance, condType string, status metav1.ConditionStatus, reason, message string) {
 	condition := metav1.Condition{
 		Type:               condType,
 		Status:             status,
@@ -438,7 +475,7 @@ func (r *KaiInstanceReconciler) setCondition(kai *swarmv1alpha1.KaiInstance, con
 // SetupWithManager sets up the controller with the Manager.
 func (r *KaiInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&swarmv1alpha1.KaiInstance{}).
+		For(&swarmv1alpha2.KaiInstance{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).

@@ -131,7 +131,7 @@ components:
           enum: [Provisioning, Running, Suspended, Failed, ""]
         ready: { type: boolean }
         suspended: { type: boolean }
-        gatewayURL: { type: string, example: kai-acme.emai-swarm.svc:18789 }
+        gatewayURL: { type: string, example: kai-acme.swarm-system.svc:18789 }
         externalURL: { type: string, example: https://acme.kai.example.com }
         creationTimestamp: { type: string, format: date-time }
 

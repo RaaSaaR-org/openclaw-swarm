@@ -31,7 +31,9 @@ import (
 	"fmt"
 
 	stripego "github.com/stripe/stripe-go/v82"
+	billingportal "github.com/stripe/stripe-go/v82/billingportal/session"
 	"github.com/stripe/stripe-go/v82/checkout/session"
+	"github.com/stripe/stripe-go/v82/invoice"
 	"github.com/stripe/stripe-go/v82/subscription"
 	"github.com/stripe/stripe-go/v82/webhook"
 )
@@ -94,6 +96,14 @@ func (c *Client) CreateCheckoutSession(p CheckoutParams) (string, error) {
 		ClientReferenceID: stripego.String(p.UserRef),
 		SuccessURL:        stripego.String(p.SuccessURL),
 		CancelURL:         stripego.String(p.CancelURL),
+		// Stamp `user_ref` on the resulting subscription's metadata so
+		// later `customer.subscription.{created,updated,deleted}` events —
+		// which don't carry a `client_reference_id` — can be routed back
+		// to the right User.ID via `userIDFromSubscription`. Stripe copies
+		// `subscription_data.metadata` onto the new Subscription verbatim.
+		SubscriptionData: &stripego.CheckoutSessionSubscriptionDataParams{
+			Metadata: map[string]string{"user_ref": p.UserRef},
+		},
 	}
 	if p.Email != "" {
 		params.CustomerEmail = stripego.String(p.Email)
@@ -127,6 +137,116 @@ func (c *Client) CancelSubscription(id string) (*stripego.Subscription, error) {
 	}
 	stripego.Key = c.APIKey
 	return subscription.Cancel(id, nil)
+}
+
+// InvoiceSummary is a flat shape of the invoice fields the GDPR export
+// (TASK-021 Phase 4) needs. We don't export the full Stripe object — most
+// of it is internal accounting noise — and we don't want to leak Stripe
+// SDK structs through the public swarm binary's API surface.
+type InvoiceSummary struct {
+	ID               string `json:"id"`
+	Number           string `json:"number"`
+	Status           string `json:"status"`
+	AmountDue        int64  `json:"amountDue"`
+	AmountPaid       int64  `json:"amountPaid"`
+	Currency         string `json:"currency"`
+	Created          int64  `json:"created"` // Unix seconds
+	HostedInvoiceURL string `json:"hostedInvoiceUrl,omitempty"`
+	InvoicePDF       string `json:"invoicePdf,omitempty"`
+}
+
+// ListInvoices returns every invoice for the given Stripe customer.
+// Used by the GDPR Art. 15 data-export job (TASK-021 Phase 4) — the user
+// is entitled to a copy of every receipt we've issued them.
+func (c *Client) ListInvoices(customerID string) ([]InvoiceSummary, error) {
+	if customerID == "" {
+		return nil, errors.New("stripe: empty customer ID")
+	}
+	stripego.Key = c.APIKey
+	iter := invoice.List(&stripego.InvoiceListParams{
+		Customer: stripego.String(customerID),
+	})
+	var out []InvoiceSummary
+	for iter.Next() {
+		inv := iter.Invoice()
+		out = append(out, InvoiceSummary{
+			ID:               inv.ID,
+			Number:           inv.Number,
+			Status:           string(inv.Status),
+			AmountDue:        inv.AmountDue,
+			AmountPaid:       inv.AmountPaid,
+			Currency:         string(inv.Currency),
+			Created:          inv.Created,
+			HostedInvoiceURL: inv.HostedInvoiceURL,
+			InvoicePDF:       inv.InvoicePDF,
+		})
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("list invoices: %w", err)
+	}
+	return out, nil
+}
+
+// ListActiveSubscriptions returns the IDs of every billable subscription
+// for the given Stripe customer. Used by the GDPR deletion cascade
+// (TASK-021 Phase 3) — we need to cancel everything before purging the
+// User row, otherwise a deleted user keeps getting charged.
+//
+// "Billable" covers all four statuses Stripe still considers chargeable:
+// active, trialing, past_due, unpaid. Already-canceled / incomplete /
+// incomplete_expired are skipped — there's nothing to cancel.
+func (c *Client) ListActiveSubscriptions(customerID string) ([]string, error) {
+	if customerID == "" {
+		return nil, errors.New("stripe: empty customer ID")
+	}
+	stripego.Key = c.APIKey
+	iter := subscription.List(&stripego.SubscriptionListParams{
+		Customer: stripego.String(customerID),
+	})
+	var ids []string
+	for iter.Next() {
+		sub := iter.Subscription()
+		switch sub.Status {
+		case stripego.SubscriptionStatusActive,
+			stripego.SubscriptionStatusTrialing,
+			stripego.SubscriptionStatusPastDue,
+			stripego.SubscriptionStatusUnpaid:
+			ids = append(ids, sub.ID)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("list subscriptions: %w", err)
+	}
+	return ids, nil
+}
+
+// PortalParams is the input shape for CreatePortalSession. The Customer
+// Portal is a hosted Stripe page where the user can update their payment
+// method, cancel/upgrade/downgrade, and view invoices — we don't reinvent
+// any of that. ReturnURL is where the browser lands after the user clicks
+// "back to <YourCompany>" inside the portal.
+type PortalParams struct {
+	CustomerID string // Stripe customer ID (cus_…) from User.stripeCustomerId
+	ReturnURL  string // browser redirect when the user exits the portal
+}
+
+// CreatePortalSession returns the URL the browser should redirect to so
+// the user lands inside Stripe's Customer Portal. Configuration of what
+// the portal exposes (cancel + upgrade + payment-method-update etc.)
+// happens once in the Stripe dashboard, not per-call.
+func (c *Client) CreatePortalSession(p PortalParams) (string, error) {
+	if p.CustomerID == "" || p.ReturnURL == "" {
+		return "", errors.New("stripe: CustomerID + ReturnURL required")
+	}
+	stripego.Key = c.APIKey
+	sess, err := billingportal.New(&stripego.BillingPortalSessionParams{
+		Customer:  stripego.String(p.CustomerID),
+		ReturnURL: stripego.String(p.ReturnURL),
+	})
+	if err != nil {
+		return "", fmt.Errorf("portal session: %w", err)
+	}
+	return sess.URL, nil
 }
 
 // ParseWebhook verifies the `Stripe-Signature` header against the webhook

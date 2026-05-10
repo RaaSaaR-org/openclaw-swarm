@@ -34,8 +34,13 @@ Files live under `templates/<name>/<lang>.{subject,html,txt}.tmpl`. All three ar
 |---|---|---|
 | `verify` | `.Name`, `.VerifyURL`, `.ExpiresInHours` | TASK-013 (signup) |
 | `welcome` | `.Name`, `.WorkspaceURL` | TASK-013 (signup, post-verification) |
+| `reset` | `.Name`, `.ResetURL`, `.ExpiresInHours` | TASK-013 (password reset) |
+| `billing-receipt` | `.Name`, `.PlanName`, `.Amount`, `.InvoiceURL`, `.PeriodStart`, `.PeriodEnd` | TASK-016 (Stripe `invoice.paid` webhook) |
+| `payment-failed` | `.Name`, `.PlanName`, `.Amount`, `.RetryURL`, `.BillingURL`, `.RetryDate` | TASK-016 (Stripe `invoice.payment_failed` webhook) |
+| `usage-warning` | `.Name`, `.WorkspaceName`, `.UsedPct`, `.ResetAt`, `.UpgradeURL` | TASK-019 (80%-of-quota cron) |
+| `account-deleted` | `.Name`, `.GraceDays`, `.RestoreURL`, `.FinalDeletionDate` | TASK-021 (deletion confirmation) |
 
-Five more templates from TASK-020 (`reset`, `billing-receipt`, `payment-failed`, `usage-warning`, `account-deleted`) ship in later phases when the upstream flows that need them land — see TASK-013 / 016 / 019 / 021.
+All 7 templates ship in DE+EN. The data shapes above are the ones the bulk-render test (`TestRenderAllTemplatesBothLangs`) exercises — call sites that diverge from these fields will break the build, which is the point. Wire-up of the 5 newer templates to their upstream flows lands with the corresponding tasks.
 
 ## Why no JS build step?
 

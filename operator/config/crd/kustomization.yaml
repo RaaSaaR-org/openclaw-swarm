@@ -6,11 +6,14 @@ resources:
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
-# patches here are for enabling the conversion webhook for each CRD
+# Conversion webhook for KaiInstance v1alpha1 ↔ v1alpha2 (TASK-012 Phase 2.B
+# + TASK-024 Phase 5). The webhook patch points the CRD at the operator's
+# Service; the cainjection patch tells cert-manager to fill in the CA bundle
+# from the serving-cert Secret. Both must apply together for the
+# kube-apiserver to trust the webhook.
+- path: patches/webhook_in_kaiinstances.yaml
+- path: patches/cainjection_in_kaiinstances.yaml
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
 
-# [WEBHOOK] To enable webhook, uncomment the following section
-# the following config is for teaching kustomize how to do kustomization for CRDs.
-#configurations:
-#- kustomizeconfig.yaml
+configurations:
+- kustomizeconfig.yaml

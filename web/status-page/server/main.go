@@ -28,7 +28,7 @@ var webFS embed.FS
 var (
 	kaiInstanceGVR = schema.GroupVersionResource{
 		Group:    "swarm.emai.io",
-		Version:  "v1alpha1",
+		Version:  "v1alpha2",
 		Resource: "kaiinstances",
 	}
 	slugRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -54,7 +54,7 @@ type publicStatus struct {
 
 func main() {
 	addr := envDefault("ADDR", ":8080")
-	namespace := envDefault("SWARM_NAMESPACE", "emai-swarm")
+	namespace := envDefault("SWARM_NAMESPACE", "swarm-system")
 
 	s := &server{namespace: namespace}
 	if cfg, err := loadKubeConfig(); err != nil {

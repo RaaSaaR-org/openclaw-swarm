@@ -32,8 +32,13 @@ const (
 type Template string
 
 const (
-	TemplateVerify  Template = "verify"
-	TemplateWelcome Template = "welcome"
+	TemplateVerify         Template = "verify"
+	TemplateWelcome        Template = "welcome"
+	TemplateReset          Template = "reset"
+	TemplateBillingReceipt Template = "billing-receipt"
+	TemplatePaymentFailed  Template = "payment-failed"
+	TemplateUsageWarning   Template = "usage-warning"
+	TemplateAccountDeleted Template = "account-deleted"
 )
 
 // Message is the rendered output of a Template + data + Lang. To and From are

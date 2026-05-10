@@ -18,11 +18,16 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
-# crd/kustomization.yaml
-#- ../webhook
-# [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'. 'WEBHOOK' components are required.
-#- ../certmanager
+# Webhook + cert-manager required for KaiInstance v1alpha1 ↔ v1alpha2
+# conversion (TASK-012 Phase 2.B + TASK-024 Phase 5). cert-manager must be
+# installed in the target cluster — provisions the serving cert that the
+# kube-apiserver verifies when calling the operator's /convert endpoint.
+- ../webhook
+- ../certmanager
+# usage-monitor CronJob (TASK-019 Phase 3) — daily auto-suspend of
+# over-budget workspaces. Uses the same image as the manager but a
+# different entrypoint (`/usage-monitor`).
+- ../cronjob
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
@@ -38,6 +43,14 @@ patches:
 # [METRICS] The following patch will enable the metrics endpoint using HTTPS and the port :8443.
 # More info: https://book.kubebuilder.io/reference/metrics
 - path: manager_metrics_patch.yaml
+  target:
+    kind: Deployment
+
+# Mounts the cert-manager-provisioned TLS cert into the operator pod and
+# opens port 9443 for the conversion webhook. Required when ../webhook and
+# ../certmanager are included in resources above (TASK-012 Phase 2.B +
+# TASK-024 Phase 5).
+- path: manager_webhook_patch.yaml
   target:
     kind: Deployment
 

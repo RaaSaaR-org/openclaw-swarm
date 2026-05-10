@@ -35,9 +35,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 
 	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 	"github.com/emai-ai/swarm-operator/internal/controller"
+	webhookv1alpha2 "github.com/emai-ai/swarm-operator/internal/webhook/v1alpha2"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -53,6 +56,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(swarmv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(swarmv1alpha2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -214,6 +218,25 @@ func main() {
 		PerSlugSubdomain:       perSlugIngress,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "KaiInstance")
+		os.Exit(1)
+	}
+
+	// Conversion webhook for KaiInstance v1alpha1 ↔ v1alpha2 (TASK-012
+	// Phase 2.B + TASK-024 Phase 5). v1alpha2 is the storage hub; v1alpha1
+	// implements conversion.Convertible. controller-runtime's webhook
+	// dispatches via the Hub/Convertible interfaces when no explicit
+	// converter is registered, so passing an empty Registry is correct
+	// here. The handler is mounted on the same webhook server that future
+	// validating/defaulting webhooks will share.
+	mgr.GetWebhookServer().Register("/convert", conversion.NewWebhookHandler(mgr.GetScheme(), conversion.NewRegistry()))
+
+	// Validating webhook for tier-resource limits (TASK-015 Phase 2).
+	// Rejects creates/updates whose spec.resources exceed pkg/quotas
+	// ceilings — defense in depth on top of the operator-side
+	// ClampResources, which silently lowers values to fit. Reuses the
+	// same webhook server that hosts /convert.
+	if err := webhookv1alpha2.SetupKaiInstanceWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to set up KaiInstance validating webhook")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

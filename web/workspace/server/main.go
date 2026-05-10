@@ -28,6 +28,8 @@ import (
 
 	"github.com/emai-ai/swarm/pkg/auth"
 	"github.com/emai-ai/swarm/pkg/authk8s"
+	"github.com/emai-ai/swarm/pkg/email"
+	stripepkg "github.com/emai-ai/swarm/pkg/stripe"
 	"github.com/emai-ai/swarm/pkg/users"
 )
 
@@ -37,15 +39,21 @@ var webFS embed.FS
 var (
 	kaiInstanceGVR = schema.GroupVersionResource{
 		Group:    "swarm.emai.io",
-		Version:  "v1alpha1",
+		Version:  "v1alpha2",
 		Resource: "kaiinstances",
 	}
 	slugRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 )
 
 const (
-	annotationCustomLinks = "swarm.emai.io/customer-links"
-	briefingConfigMapTpl  = "kai-%s-briefings"
+	// annotationTenantLinks is the canonical (TASK-024) key for per-tenant
+	// extra app-shelf links on the KaiInstance metadata. The legacy
+	// `swarm.emai.io/customer-links` key is also read for one release so
+	// existing internal-tenant manifests in `swarm-emai` keep their links
+	// while we migrate the annotation in-place.
+	annotationTenantLinks       = "swarm.emai.io/tenant-links"
+	annotationLegacyCustomLinks = "swarm.emai.io/customer-links"
+	briefingConfigMapTpl        = "kai-%s-briefings"
 )
 
 type server struct {
@@ -62,6 +70,20 @@ type server struct {
 	// the per-tenant kai-<slug>-users Secret. Nil disables the SaaS path entirely
 	// (every login then falls through to the legacy Secret flow).
 	users users.Store
+
+	// email + deletion config (TASK-021 Phase 1). All optional — missing
+	// email Sender or empty deletionSecret leaves the account-deletion
+	// endpoints returning 503 so an enabled-but-unconfigured deploy fails
+	// loudly. The base URL is what the confirmation email links back to.
+	email           email.Sender
+	emailFrom       string
+	deletionSecret  []byte
+	deletionTTL     time.Duration
+	deletionBaseURL string // e.g. "https://kai.emai.dev"; embeds in the confirmation email link
+
+	// Stripe billing (TASK-016 Phase 1). Empty Client / WebhookSecret /
+	// TierToPriceID disables the corresponding endpoint with 503.
+	stripe stripeConfig
 }
 
 type appLink struct {
@@ -112,7 +134,7 @@ type centerResponse struct {
 
 func main() {
 	addr := envDefault("ADDR", ":8080")
-	namespace := envDefault("SWARM_NAMESPACE", "emai-swarm")
+	namespace := envDefault("SWARM_NAMESPACE", "swarm-system")
 
 	s := &server{
 		namespace:  namespace,
@@ -157,11 +179,90 @@ func main() {
 		s.revoker = &authk8s.SecretRevoker{Client: s.core, Namespace: namespace}
 	}
 
-	// User store: MemoryStore for dev / single-process; production swarm-cloud
-	// overlay swaps to pkg/userspg.PoolStore via a separate code change so the
-	// public swarm binary doesn't pull pgx by default.
-	s.users = users.NewMemoryStore()
-	log.Printf("workspace: using in-memory user store (TASK-014 Phase 2 — Postgres wiring lands with the swarm-cloud overlay)")
+	// User store: MemoryStore by default; opt in to Postgres-backed PoolStore
+	// by setting `KAI_USERS_DSN`. Sharing the store across onboarding +
+	// workspace is what lets a user signed up via onboarding actually log
+	// in to the workspace dashboard. Both services point at the same
+	// database in production. Set the same DSN on both pods.
+	if dsn := os.Getenv("KAI_USERS_DSN"); dsn != "" {
+		store, err := newPoolStore(dsn)
+		if err != nil {
+			log.Fatalf("workspace: KAI_USERS_DSN configured but failed to connect: %v", err)
+		}
+		s.users = store
+		log.Printf("workspace: using Postgres user store (KAI_USERS_DSN set)")
+	} else {
+		s.users = users.NewMemoryStore()
+		log.Printf("workspace: using in-memory user store (set KAI_USERS_DSN to use Postgres)")
+	}
+
+	// Account-deletion flow (TASK-021 Phase 1) — opt-in via env vars. All
+	// three of RESEND_API_KEY + KAI_DELETION_SECRET + KAI_DASHBOARD_BASE_URL
+	// must be set or the endpoints return 503.
+	if apiKey := os.Getenv("RESEND_API_KEY"); apiKey != "" {
+		if sender, err := email.NewResendSender(apiKey); err != nil {
+			log.Printf("workspace: RESEND_API_KEY rejected (%v); account-deletion endpoints will return 503", err)
+		} else {
+			s.email = sender
+			s.emailFrom = os.Getenv("EMAIL_FROM")
+		}
+	} else if dir := os.Getenv("EMAIL_DISK_DIR"); dir != "" {
+		// Dev-mode fallback: write emails to disk instead of sending. Mirrors
+		// onboarding's setupSignup behavior so the SaaS deletion flow + the
+		// post-delete email can be exercised end-to-end on k3d without a
+		// real Resend key. No-op in production overlays that always set
+		// RESEND_API_KEY.
+		if sender, err := email.NewDiskSender(dir); err != nil {
+			log.Printf("workspace: EMAIL_DISK_DIR rejected (%v); account-deletion endpoints will return 503", err)
+		} else {
+			s.email = sender
+			s.emailFrom = os.Getenv("EMAIL_FROM")
+			log.Printf("workspace: dev-mode disk email sender at %s", dir)
+		}
+	}
+	if secret := os.Getenv("KAI_DELETION_SECRET"); secret != "" {
+		s.deletionSecret = []byte(secret)
+	}
+	s.deletionBaseURL = os.Getenv("KAI_DASHBOARD_BASE_URL")
+	s.deletionTTL = 24 * time.Hour
+	if s.email != nil && len(s.deletionSecret) > 0 && s.deletionBaseURL != "" {
+		log.Printf("workspace: account-deletion flow enabled (base=%s)", s.deletionBaseURL)
+	} else {
+		log.Printf("workspace: account-deletion flow disabled — set RESEND_API_KEY + KAI_DELETION_SECRET + KAI_DASHBOARD_BASE_URL to enable")
+	}
+
+	// Stripe billing (TASK-016 Phase 1). Opt-in via env. Tier→price-ID
+	// mapping is parsed from STRIPE_PRICE_STARTER + STRIPE_PRICE_GROWTH so
+	// the deployment overlay can override per environment without
+	// hardcoding price_… IDs in this binary.
+	if stripeKey := os.Getenv("STRIPE_API_KEY"); stripeKey != "" {
+		priceMap := map[string]stripepkg.Tier{}
+		tierToPrice := map[users.Tier]string{}
+		if pid := os.Getenv("STRIPE_PRICE_STARTER"); pid != "" {
+			priceMap[pid] = stripepkg.TierStarter
+			tierToPrice[users.TierStarter] = pid
+		}
+		if pid := os.Getenv("STRIPE_PRICE_GROWTH"); pid != "" {
+			priceMap[pid] = stripepkg.TierGrowth
+			tierToPrice[users.TierGrowth] = pid
+		}
+		client, err := stripepkg.NewClient(stripeKey, priceMap)
+		if err != nil {
+			log.Printf("workspace: STRIPE_API_KEY rejected (%v); billing endpoints will return 503", err)
+		} else {
+			s.stripe = stripeConfig{
+				Client:          client,
+				WebhookSecret:   os.Getenv("STRIPE_WEBHOOK_SECRET"),
+				TierToPriceID:   tierToPrice,
+				SuccessURL:      os.Getenv("STRIPE_SUCCESS_URL"),
+				CancelURL:       os.Getenv("STRIPE_CANCEL_URL"),
+				PortalReturnURL: os.Getenv("STRIPE_PORTAL_RETURN_URL"),
+			}
+			log.Printf("workspace: Stripe billing wired (webhook=%t, prices=%d)", s.stripe.WebhookSecret != "", len(tierToPrice))
+		}
+	} else {
+		log.Printf("workspace: Stripe billing disabled — set STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET + STRIPE_PRICE_* + STRIPE_SUCCESS_URL/CANCEL_URL/PORTAL_RETURN_URL to enable")
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +272,10 @@ func main() {
 	mux.HandleFunc("GET /api/workspace/{slug}/auth", s.handleAuthInfo)
 	mux.HandleFunc("POST /api/workspace/{slug}/login", s.handleLogin)
 	mux.HandleFunc("POST /api/workspace/{slug}/logout", s.handleLogout)
+	// Traefik forwardAuth target — gates /hq/<slug> dashboards behind the same
+	// session cookie as /workspace/<slug>. GET so an unauth'd browser redirect
+	// reaches the user.
+	mux.HandleFunc("GET /api/workspace/{slug}/forward-auth", s.handleForwardAuth)
 	mux.HandleFunc("GET /api/workspace/{slug}/users", s.listUsers)
 	mux.HandleFunc("POST /api/workspace/{slug}/users", s.addUser)
 	mux.HandleFunc("DELETE /api/workspace/{slug}/users/{email}", s.removeUser)
@@ -178,6 +283,14 @@ func main() {
 	mux.HandleFunc("GET /api/workspace/{slug}/agents", s.listAgents)
 	mux.HandleFunc("GET /api/workspace/{slug}/owner", s.handleOwner)
 	mux.HandleFunc("GET /api/workspace/{slug}/owned-workspaces", s.handleOwnedWorkspaces)
+	mux.HandleFunc("GET /api/workspace/{slug}/catalog", s.handleListCatalog)
+	mux.HandleFunc("PATCH /api/workspace/{slug}/app", s.handleSwitchApp)
+	mux.HandleFunc("POST /api/workspace/{slug}/account/request-deletion", s.handleRequestDeletion)
+	mux.HandleFunc("GET /api/workspace/{slug}/account/confirm-deletion", s.handleConfirmDeletion)
+	mux.HandleFunc("GET /api/workspace/{slug}/account/export", s.handleAccountExport)
+	mux.HandleFunc("POST /api/workspace/{slug}/billing/checkout", s.handleBillingCheckout)
+	mux.HandleFunc("POST /api/workspace/{slug}/billing/portal", s.handleBillingPortal)
+	mux.HandleFunc("POST /api/billing/webhook", s.handleBillingWebhook)
 
 	// Legacy /center, /api/center, /center-assets paths — 301 to the /workspace*
 	// equivalents for one release cycle. Drop after clients have migrated
@@ -364,9 +477,15 @@ func (s *server) buildLinks(slug string, obj *unstructured.Unstructured) []appLi
 		},
 	}
 
-	// Custom per-customer links from the KaiInstance annotation.
+	// Per-tenant extra links from the KaiInstance annotation. The new key
+	// is `swarm.emai.io/tenant-links` (TASK-024); the legacy
+	// `swarm.emai.io/customer-links` is read as a fallback for one release.
 	annotations := obj.GetAnnotations()
-	if raw, ok := annotations[annotationCustomLinks]; ok && raw != "" {
+	raw, ok := annotations[annotationTenantLinks]
+	if !ok || raw == "" {
+		raw, ok = annotations[annotationLegacyCustomLinks]
+	}
+	if ok && raw != "" {
 		var custom []appLink
 		if err := json.Unmarshal([]byte(raw), &custom); err == nil {
 			for i := range custom {

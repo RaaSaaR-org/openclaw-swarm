@@ -182,22 +182,22 @@ Best for: 10+ tenant instances, auto-scaling, centrally managed provisioning.
 
 ```bash
 # 1. Create k3d cluster (dev)
-k3d cluster create emai-swarm --agents 1
-k3d image import ghcr.io/openclaw/openclaw:latest -c emai-swarm
-k3d image import busybox:latest -c emai-swarm
+k3d cluster create swarm-system --agents 1
+k3d image import ghcr.io/openclaw/openclaw:latest -c swarm-system
+k3d image import busybox:latest -c swarm-system
 
 # 2. Create namespace and base resources
-kubectl create namespace emai-swarm
+kubectl create namespace swarm-system
 
 # 3. Create secrets
 kubectl create secret generic swarm-secrets \
-  --namespace emai-swarm \
+  --namespace swarm-system \
   --from-literal=openrouter-api-key="your-key" \
   --from-literal=telegram-bot-token="your-bot-token"
 
 # 4. Create central agent identity ConfigMap
 kubectl create configmap central-identity \
-  --namespace emai-swarm \
+  --namespace swarm-system \
   --from-file=SOUL.md=agents/central/SOUL.md \
   --from-file=HEARTBEAT.md=agents/central/HEARTBEAT.md \
   --from-file=TOOLS.md=agents/central/TOOLS.md \

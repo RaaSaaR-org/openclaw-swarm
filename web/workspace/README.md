@@ -57,7 +57,7 @@ apiVersion: swarm.emai.io/v1alpha1
 kind: KaiInstance
 metadata:
   name: kai-acme-gmbh
-  namespace: emai-swarm
+  namespace: swarm-system
   annotations:
     swarm.emai.io/customer-links: |
       [
@@ -90,7 +90,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kai-acme-gmbh-profile     # convention: kai-<slug>-profile
-  namespace: emai-swarm
+  namespace: swarm-system
 data:
   team.json: |
     [
@@ -127,7 +127,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kai-acme-gmbh-briefings   # convention: kai-<slug>-briefings
-  namespace: emai-swarm
+  namespace: swarm-system
 data:
   briefings.json: |
     [
@@ -171,7 +171,7 @@ docker build -t emai-workspace:latest .
 kubectl apply -k ../../kubernetes/
 
 # port-forward for local access
-kubectl port-forward -n emai-swarm svc/workspace 8080:8080
+kubectl port-forward -n swarm-system svc/workspace 8080:8080
 ```
 
 K8s manifests live at [`../../kubernetes/workspace/`](../../kubernetes/workspace/).
@@ -197,7 +197,7 @@ K8s manifests live at [`../../kubernetes/workspace/`](../../kubernetes/workspace
 | Var                | Default       | Notes                                                                                              |
 |--------------------|---------------|----------------------------------------------------------------------------------------------------|
 | `ADDR`             | `:8080`       | Listen address                                                                                     |
-| `SWARM_NAMESPACE`  | `emai-swarm`  | Namespace where `KaiInstance`s and per-customer Secrets/ConfigMaps live                            |
+| `SWARM_NAMESPACE`  | `swarm-system`  | Namespace where `KaiInstance`s and per-customer Secrets/ConfigMaps live                            |
 | `CHAT_BASE_URL`    | `""`          | Optional host prefix for the built-in chat link. Empty = same origin (`/chat/<slug>`).             |
 | `STATUS_BASE_URL`  | `""`          | Same idea for the status link.                                                                     |
 | `DEMO_MODE`        | `""`          | `1`/`true` to bypass K8s and serve canned data                                                     |

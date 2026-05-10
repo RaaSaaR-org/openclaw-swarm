@@ -81,6 +81,18 @@ interface OwnedWorkspace {
   current?: boolean;
 }
 
+interface CatalogApp {
+  slug: string;
+  name: string;
+  nameDe?: string;
+  tier: string;
+  category: string;
+  toolsProfile: string;
+  shortDescription?: string;
+  shortDescriptionDe?: string;
+  recommendedModel?: string;
+}
+
 const SEARCH_THRESHOLD = 5;
 
 const path = window.location.pathname;
@@ -113,6 +125,20 @@ let agentsList: Agent[] | null = null;
 let agentsError: string | null = null;
 let ownedWorkspaces: OwnedWorkspace[] | null = null;
 let ownedWorkspacesError: string | null = null;
+let catalogApps: CatalogApp[] | null = null;
+let switchAppPickerOpen = false;
+let switchAppFeedback: { kind: 'ok' | 'err'; message: string } | null = null;
+let deletionFeedback: { kind: 'ok' | 'err'; message: string } | null = null;
+
+interface OwnerInfo {
+  email: string;
+  userId?: string;
+  tier?: string;     // "free" | "starter" | "growth" | "enterprise"
+  managed?: string;  // "saas" | "internal"
+}
+let ownerInfo: OwnerInfo | null = null;
+let ownerInfoError: string | null = null;
+let billingFeedback: { kind: 'ok' | 'err'; message: string } | null = null;
 
 interface AuthInfo {
   authenticated: boolean;
@@ -373,7 +399,11 @@ function renderPage(data: CenterData, route: Route, param?: string) {
       break;
     case 'workspaces':
       container.innerHTML = workspacesPageHTML();
+      bindSwitchAppHandlers();
+      bindDeleteAccountHandler();
+      bindBillingHandlers();
       if (ownedWorkspaces === null) void loadOwnedWorkspaces();
+      if (ownerInfo === null && ownerInfoError === null) void loadOwner();
       break;
     case 'team-access':
       container.innerHTML = accessPageHTML();
@@ -629,7 +659,80 @@ function workspacesSectionHTML(): string {
       <ul class="workspaces-list">
         ${ownedWorkspaces.map(workspaceCardHTML).join('')}
       </ul>
+      ${billingSectionHTML()}
+      ${dangerZoneHTML()}
     </section>
+  `;
+}
+
+// billingSectionHTML renders the upgrade / manage-subscription buttons for
+// SaaS-managed workspaces (TASK-016 Phase 1.B + TASK-022 Phase 2 wire-up).
+// Internal-managed tenants (no central User row) get nothing — billing
+// only applies to SaaS sign-ups. Free users see "Upgrade to Starter /
+// Growth" buttons that POST to /billing/checkout. Paid users see "Manage
+// subscription" which POSTs to /billing/portal. Both endpoints return
+// {url} → window.location.assign redirect to the Stripe-hosted page.
+function billingSectionHTML(): string {
+  if (ownerInfo === null) {
+    return '';
+  }
+  if (ownerInfo.managed && ownerInfo.managed !== 'saas') {
+    return ''; // internal-managed tenants skip billing entirely
+  }
+  const tier = (ownerInfo.tier || 'free').toLowerCase();
+  const feedback = billingFeedback
+    ? `<span class="switch-app-feedback switch-app-${billingFeedback.kind}">${escapeHtml(billingFeedback.message)}</span>`
+    : '';
+  if (tier === 'free') {
+    return `
+      <div class="billing-zone">
+        <h3>Plan</h3>
+        <p class="dim">You're on the <strong>Free</strong> tier. Upgrade for higher quotas, more workspaces, and priority support.</p>
+        <div class="billing-zone-row">
+          <button type="button" class="primary-btn" data-billing-checkout="starter">Upgrade to Starter</button>
+          <button type="button" class="primary-btn" data-billing-checkout="growth">Upgrade to Growth</button>
+          ${feedback}
+        </div>
+      </div>
+    `;
+  }
+  // Paid tiers — manage-subscription via Stripe Customer Portal.
+  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+  return `
+    <div class="billing-zone">
+      <h3>Plan</h3>
+      <p class="dim">You're on the <strong>${escapeHtml(tierLabel)}</strong> tier. Manage payment method, swap plans, or cancel via Stripe.</p>
+      <div class="billing-zone-row">
+        <button type="button" class="primary-btn" data-billing-portal>Manage subscription</button>
+        ${feedback}
+      </div>
+    </div>
+  `;
+}
+
+// dangerZoneHTML renders the account-deletion entry point at the bottom of
+// the Your Workspaces view (TASK-021 Phase 1). Confirmation flow is
+// 3-step: button click → window.confirm → POST → email lands → user
+// clicks the email link → backend SoftDeletes the user.
+function dangerZoneHTML(): string {
+  const feedback = deletionFeedback
+    ? `<span class="switch-app-feedback switch-app-${deletionFeedback.kind}">${escapeHtml(deletionFeedback.message)}</span>`
+    : '';
+  // GDPR Art. 15 right-of-access link (TASK-021 Phase 4) lives next to
+  // the deletion button so the two compliance affordances are co-located.
+  const exportHref = `/api/workspace/${encodeURIComponent(slug)}/account/export`;
+  return `
+    <div class="danger-zone">
+      <h3>Account data &amp; deletion</h3>
+      <p class="dim">
+        Download a ZIP of your data (GDPR Art. 15) or queue your account for deletion (Art. 17). Deletion is a 30-day grace period — confirm via the email link, sign back in within the window to cancel.
+      </p>
+      <div class="danger-zone-row">
+        <a class="primary-btn small" href="${escapeAttr(exportHref)}" download>Download my data</a>
+        <button type="button" class="danger-btn" data-delete-account>Delete account…</button>
+        ${feedback}
+      </div>
+    </div>
   `;
 }
 
@@ -650,7 +753,48 @@ function workspaceCardHTML(w: OwnedWorkspace): string {
           <span class="workspace-card-slug dim">/workspace/${escapeHtml(w.slug)}</span>
         </div>
       </a>
+      ${w.current ? switchAppRegionHTML(w) : ''}
     </li>
+  `;
+}
+
+function switchAppRegionHTML(w: OwnedWorkspace): string {
+  if (!switchAppPickerOpen) {
+    return `
+      <div class="switch-app-row">
+        <button type="button" class="switch-app-toggle" data-switch-app-open>Change persona</button>
+        ${switchAppFeedback ? `<span class="switch-app-feedback switch-app-${switchAppFeedback.kind}">${escapeHtml(switchAppFeedback.message)}</span>` : ''}
+      </div>
+    `;
+  }
+  if (catalogApps === null) {
+    return `<div class="switch-app-row"><span class="dim">Loading personas&hellip;</span></div>`;
+  }
+  if (catalogApps.length === 0) {
+    return `
+      <div class="switch-app-row">
+        <span class="dim">No personas available in this deployment.</span>
+        <button type="button" class="switch-app-cancel" data-switch-app-close>Close</button>
+      </div>
+    `;
+  }
+  const current = w.appRef || '';
+  return `
+    <div class="switch-app-region">
+      <label class="switch-app-label" for="switch-app-select">Switch this workspace to a different persona</label>
+      <div class="switch-app-controls">
+        <select id="switch-app-select" class="switch-app-select" data-switch-app-select>
+          ${catalogApps.map((a) => `
+            <option value="${escapeAttr(a.slug)}"${a.slug === current ? ' selected' : ''}>
+              ${escapeHtml(a.name)}${a.tier !== 'free' ? ` (${escapeHtml(a.tier)})` : ''}
+            </option>
+          `).join('')}
+        </select>
+        <button type="button" class="switch-app-save" data-switch-app-save>Save</button>
+        <button type="button" class="switch-app-cancel" data-switch-app-close>Cancel</button>
+      </div>
+      <p class="switch-app-warning dim">Changing the persona resets your agent's SOUL.md at the next session. Stored memory and chat history stay put.</p>
+    </div>
   `;
 }
 
@@ -676,6 +820,208 @@ function refreshWorkspacesSection() {
   const section = document.getElementById('workspaces');
   if (!section) return;
   section.outerHTML = workspacesSectionHTML();
+  bindSwitchAppHandlers();
+  bindDeleteAccountHandler();
+  bindBillingHandlers();
+}
+
+async function loadOwner() {
+  ownerInfoError = null;
+  try {
+    const res = await fetch(`/api/workspace/${encodeURIComponent(slug)}/owner`, { credentials: 'same-origin' });
+    if (!res.ok) {
+      ownerInfoError = `Could not load account info (HTTP ${res.status}).`;
+      ownerInfo = null;
+    } else {
+      ownerInfo = (await res.json()) as OwnerInfo;
+    }
+  } catch (e) {
+    ownerInfoError = `Network error: ${String(e)}.`;
+    ownerInfo = null;
+  }
+  refreshWorkspacesSection();
+}
+
+function bindBillingHandlers() {
+  document.querySelectorAll<HTMLButtonElement>('[data-billing-checkout]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const tier = btn.getAttribute('data-billing-checkout') || '';
+      if (!tier) return;
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Redirecting…';
+      try {
+        const res = await fetch(`/api/workspace/${encodeURIComponent(slug)}/billing/checkout`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier }),
+        });
+        if (res.status === 503) {
+          billingFeedback = { kind: 'err', message: 'Billing not configured on this deploy.' };
+        } else if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          billingFeedback = { kind: 'err', message: body.error ? `Failed: ${body.error}` : `Failed (HTTP ${res.status}).` };
+        } else {
+          const body = (await res.json()) as { url?: string };
+          if (body.url) {
+            window.location.assign(body.url);
+            return;
+          }
+          billingFeedback = { kind: 'err', message: 'Checkout returned no URL.' };
+        }
+      } catch (e) {
+        billingFeedback = { kind: 'err', message: `Network error: ${String(e)}.` };
+      }
+      btn.textContent = orig;
+      btn.disabled = false;
+      refreshWorkspacesSection();
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-billing-portal]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Redirecting…';
+      try {
+        const res = await fetch(`/api/workspace/${encodeURIComponent(slug)}/billing/portal`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (res.status === 503) {
+          billingFeedback = { kind: 'err', message: 'Billing portal not configured on this deploy.' };
+        } else if (res.status === 400) {
+          billingFeedback = { kind: 'err', message: 'No subscription found — upgrade first.' };
+        } else if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          billingFeedback = { kind: 'err', message: body.error ? `Failed: ${body.error}` : `Failed (HTTP ${res.status}).` };
+        } else {
+          const body = (await res.json()) as { url?: string };
+          if (body.url) {
+            window.location.assign(body.url);
+            return;
+          }
+          billingFeedback = { kind: 'err', message: 'Portal returned no URL.' };
+        }
+      } catch (e) {
+        billingFeedback = { kind: 'err', message: `Network error: ${String(e)}.` };
+      }
+      btn.textContent = orig;
+      btn.disabled = false;
+      refreshWorkspacesSection();
+    });
+  });
+}
+
+function bindDeleteAccountHandler() {
+  document.querySelectorAll<HTMLButtonElement>('[data-delete-account]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const ok = window.confirm(
+        'This will queue your account for deletion. We send a confirmation email; you must click the link within 24 hours.\n\n' +
+          'After confirmation: 30-day grace window, then everything is permanently erased — workspaces, agents, chat history, all of it.\n\n' +
+          'Continue?',
+      );
+      if (!ok) return;
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Sending…';
+      try {
+        const res = await fetch(
+          `/api/workspace/${encodeURIComponent(slug)}/account/request-deletion`,
+          { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        );
+        if (res.status === 503) {
+          deletionFeedback = { kind: 'err', message: 'Account deletion not configured on this deploy.' };
+        } else if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          deletionFeedback = { kind: 'err', message: body.error ? `Failed: ${body.error}` : `Failed (HTTP ${res.status}).` };
+        } else {
+          deletionFeedback = { kind: 'ok', message: 'Confirmation email sent. Check your inbox to complete deletion.' };
+        }
+      } catch (e) {
+        deletionFeedback = { kind: 'err', message: `Network error: ${String(e)}.` };
+      }
+      btn.textContent = orig;
+      btn.disabled = false;
+      refreshWorkspacesSection();
+    });
+  });
+}
+
+function bindSwitchAppHandlers() {
+  document.querySelectorAll<HTMLButtonElement>('[data-switch-app-open]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      switchAppPickerOpen = true;
+      switchAppFeedback = null;
+      refreshWorkspacesSection();
+      if (catalogApps === null) {
+        await loadCatalog();
+        refreshWorkspacesSection();
+      }
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-switch-app-close]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchAppPickerOpen = false;
+      refreshWorkspacesSection();
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-switch-app-save]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const sel = document.querySelector<HTMLSelectElement>('[data-switch-app-select]');
+      if (!sel || !ownedWorkspaces) return;
+      const current = ownedWorkspaces.find((w) => w.current);
+      if (!current) return;
+      const next = sel.value;
+      if (!next || next === current.appRef) {
+        switchAppPickerOpen = false;
+        refreshWorkspacesSection();
+        return;
+      }
+      const ok = window.confirm(
+        `Switch this workspace from "${current.appRef || 'no persona'}" to "${next}"?\n\nThe agent's SOUL.md will be reset on its next session start. Stored memory and chat history are kept.`,
+      );
+      if (!ok) return;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        const res = await fetch(`/api/workspace/${encodeURIComponent(slug)}/app`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appRef: next }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          switchAppFeedback = { kind: 'err', message: body.error ? `Save failed: ${body.error}` : `Save failed (HTTP ${res.status}).` };
+        } else {
+          const body = await res.json() as { appRef: string };
+          current.appRef = body.appRef;
+          switchAppFeedback = { kind: 'ok', message: `Persona changed to ${body.appRef}.` };
+        }
+      } catch (e) {
+        switchAppFeedback = { kind: 'err', message: `Network error: ${String(e)}.` };
+      }
+      switchAppPickerOpen = false;
+      refreshWorkspacesSection();
+    });
+  });
+}
+
+async function loadCatalog() {
+  try {
+    const res = await fetch(`/api/workspace/${encodeURIComponent(slug)}/catalog`, { credentials: 'same-origin' });
+    if (!res.ok) {
+      catalogApps = [];
+      return;
+    }
+    const body = await res.json() as { apps: CatalogApp[] };
+    catalogApps = body.apps || [];
+  } catch {
+    catalogApps = [];
+  }
 }
 
 function focusBriefing(id: string) {

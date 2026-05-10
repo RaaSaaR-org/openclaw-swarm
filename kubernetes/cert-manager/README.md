@@ -56,10 +56,10 @@ de-facto webhook) and by `external-dns`.
 # 1. Pick staging first to confirm the issuer works.
 kubectl apply -f kubernetes/cert-manager/cluster-issuer-staging.yml
 # 2. Watch the wildcard cert issue (DNS propagation takes 1-2 minutes).
-kubectl -n emai-swarm get certificate -w
+kubectl -n swarm-system get certificate -w
 # 3. Once green, swap to prod and re-issue.
 kubectl apply -f kubernetes/cert-manager/cluster-issuer.yml
-kubectl -n emai-swarm delete certificate <name>  # forces re-issue against prod
+kubectl -n swarm-system delete certificate <name>  # forces re-issue against prod
 kubectl apply -f kubernetes/cert-manager/wildcard-certificate.yml
 ```
 

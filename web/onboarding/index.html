@@ -6,6 +6,10 @@
     <title>Loading…</title>
     <link rel="icon" type="image/svg+xml" href="/branding/favicon.svg" />
     <link rel="stylesheet" href="/branding/theme.css" />
+    <!-- Cloudflare Turnstile (TASK-013 Phase 3). The widget mounts only
+         when /api/onboarding/config returns a non-empty turnstileSiteKey;
+         the script tag itself is harmless when no widget renders. -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   </head>
   <body>
     <div id="app"></div>

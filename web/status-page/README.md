@@ -70,7 +70,7 @@ docker build -t emai-status-page:latest .
 kubectl apply -k ../../kubernetes/
 
 # port-forward for local access
-kubectl port-forward -n emai-swarm svc/status-page 8080:8080
+kubectl port-forward -n swarm-system svc/status-page 8080:8080
 ```
 
 K8s manifests live at [`../../kubernetes/status-page/`](../../kubernetes/status-page/).
@@ -89,7 +89,7 @@ The token is matched against `spec.gatewayAuth.token` on the corresponding `KaiI
 | Var               | Default       | Notes                                          |
 |-------------------|---------------|------------------------------------------------|
 | `ADDR`            | `:8080`       | Listen address                                 |
-| `SWARM_NAMESPACE` | `emai-swarm`  | Namespace where `KaiInstance`s live            |
+| `SWARM_NAMESPACE` | `swarm-system`  | Namespace where `KaiInstance`s live            |
 | `KUBECONFIG`      | (auto)        | Used outside cluster; in-cluster config first  |
 
 ## Security model

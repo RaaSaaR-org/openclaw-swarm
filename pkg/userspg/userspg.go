@@ -98,7 +98,7 @@ func (s *PoolStore) Create(ctx context.Context, p users.CreateParams) (*users.Us
 		INSERT INTO users (id, email, password_hash, tier, language, app, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, email, password_hash, tier, COALESCE(stripe_customer_id, ''),
-		          language, app, created_at, email_verified_at, deleted_at, last_login_at`
+		          language, app, created_at, email_verified_at, email_bounced_at, deleted_at, last_login_at`
 	row := s.Pool.QueryRow(ctx, q, id, email, p.PasswordHash, string(p.Tier), string(p.Language), app, now)
 	u, err := scanUser(row)
 	if err != nil {
@@ -114,7 +114,7 @@ func (s *PoolStore) Create(ctx context.Context, p users.CreateParams) (*users.Us
 func (s *PoolStore) GetByID(ctx context.Context, id string) (*users.User, error) {
 	const q = `
 		SELECT id, email, password_hash, tier, COALESCE(stripe_customer_id, ''),
-		       language, app, created_at, email_verified_at, deleted_at, last_login_at
+		       language, app, created_at, email_verified_at, email_bounced_at, deleted_at, last_login_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL`
 	row := s.Pool.QueryRow(ctx, q, id)
@@ -129,7 +129,7 @@ func (s *PoolStore) GetByEmail(ctx context.Context, email string) (*users.User, 
 	email = users.NormalizeEmail(email)
 	const q = `
 		SELECT id, email, password_hash, tier, COALESCE(stripe_customer_id, ''),
-		       language, app, created_at, email_verified_at, deleted_at, last_login_at
+		       language, app, created_at, email_verified_at, email_bounced_at, deleted_at, last_login_at
 		FROM users
 		WHERE lower(email) = $1 AND deleted_at IS NULL`
 	row := s.Pool.QueryRow(ctx, q, email)
@@ -167,6 +167,21 @@ func (s *PoolStore) UpdateStripeCustomerID(ctx context.Context, id, stripeID str
 
 func (s *PoolStore) MarkEmailVerified(ctx context.Context, id string, at time.Time) error {
 	tag, err := s.Pool.Exec(ctx, `UPDATE users SET email_verified_at = $1 WHERE id = $2 AND deleted_at IS NULL`, at.UTC(), id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return users.ErrNotFound
+	}
+	return nil
+}
+
+// MarkEmailBounced records the most recent provider-reported bounce or
+// complaint. Unlike MarkEmailVerified, this WHERE clause omits the
+// `deleted_at IS NULL` guard — bouncing during the GDPR grace window is
+// still useful info for ops; we shouldn't silently ignore the webhook.
+func (s *PoolStore) MarkEmailBounced(ctx context.Context, id string, at time.Time) error {
+	tag, err := s.Pool.Exec(ctx, `UPDATE users SET email_bounced_at = $1 WHERE id = $2`, at.UTC(), id)
 	if err != nil {
 		return err
 	}
@@ -327,10 +342,10 @@ func scanUser(row pgx.Row) (*users.User, error) {
 	var u users.User
 	var stripeID string
 	var tier, lang, app string
-	var verifiedAt, deletedAt, lastLoginAt *time.Time
+	var verifiedAt, bouncedAt, deletedAt, lastLoginAt *time.Time
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &tier, &stripeID,
-		&lang, &app, &u.CreatedAt, &verifiedAt, &deletedAt, &lastLoginAt,
+		&lang, &app, &u.CreatedAt, &verifiedAt, &bouncedAt, &deletedAt, &lastLoginAt,
 	)
 	if err != nil {
 		return nil, err
@@ -340,6 +355,7 @@ func scanUser(row pgx.Row) (*users.User, error) {
 	u.App = app
 	u.StripeCustomerID = stripeID
 	u.EmailVerifiedAt = verifiedAt
+	u.EmailBouncedAt = bouncedAt
 	u.DeletedAt = deletedAt
 	u.LastLoginAt = lastLoginAt
 	return &u, nil

@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 )
 
 // usersSecretName returns the per-customer Secret holding the email + password-hash list.
@@ -40,7 +40,7 @@ func chatBridgeSecretName(slug string) string {
 
 // buildUsersSecret creates the empty users-list Secret for a customer.
 // Shape: { "users.json": "[]" } — populated by workspace's admin UI.
-func buildUsersSecret(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Secret {
+func buildUsersSecret(kai *swarmv1alpha2.KaiInstance, slug string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      usersSecretName(slug),
@@ -60,7 +60,7 @@ func buildUsersSecret(kai *swarmv1alpha1.KaiInstance, slug string) *corev1.Secre
 //   - device-public      base64url-encoded ed25519 public key
 //   - device-private     base64url-encoded ed25519 private key (64 bytes seed||pub)
 //   - jwt-secret         32 random bytes, hex-encoded
-func buildChatBridgeSecret(kai *swarmv1alpha1.KaiInstance, slug string) (*corev1.Secret, error) {
+func buildChatBridgeSecret(kai *swarmv1alpha2.KaiInstance, slug string) (*corev1.Secret, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate ed25519 keypair: %w", err)
@@ -92,7 +92,7 @@ func buildChatBridgeSecret(kai *swarmv1alpha1.KaiInstance, slug string) (*corev1
 
 // reconcileUsersSecret creates the users Secret if missing. Never overwrites — admin writes are
 // authoritative once the Secret exists.
-func (r *KaiInstanceReconciler) reconcileUsersSecret(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileUsersSecret(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	desired := buildUsersSecret(kai, slug)
 	if err := controllerutil.SetControllerReference(kai, desired, r.Scheme); err != nil {
 		return err
@@ -108,7 +108,7 @@ func (r *KaiInstanceReconciler) reconcileUsersSecret(ctx context.Context, kai *s
 
 // reconcileChatBridgeSecret creates the chat-bridge Secret if missing. Never overwrites — the
 // device keypair is sticky for the lifetime of the KaiInstance (rotation is a separate flow).
-func (r *KaiInstanceReconciler) reconcileChatBridgeSecret(ctx context.Context, kai *swarmv1alpha1.KaiInstance, slug string) error {
+func (r *KaiInstanceReconciler) reconcileChatBridgeSecret(ctx context.Context, kai *swarmv1alpha2.KaiInstance, slug string) error {
 	var existing corev1.Secret
 	err := r.Get(ctx, types.NamespacedName{Name: chatBridgeSecretName(slug), Namespace: kai.Namespace}, &existing)
 	if err == nil {

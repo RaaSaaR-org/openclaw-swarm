@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kira-central
-  namespace: emai-swarm
   labels:
     app: kira-central
     component: agent
@@ -82,7 +81,7 @@ spec:
             - name: PATH
               value: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/shared-bin"
             - name: SWARM_NAMESPACE
-              value: "emai-swarm"
+              value: "swarm-system"
           volumeMounts:
             - name: state
               mountPath: /home/node/.openclaw

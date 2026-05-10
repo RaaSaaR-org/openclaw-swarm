@@ -5,11 +5,16 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: workspace
-  namespace: emai-swarm
 rules:
   - apiGroups: ["swarm.emai.io"]
     resources: ["kaiinstances"]
-    verbs: ["get"]
+    # `list` is needed for the SaaS owned-workspaces dashboard
+    # (TASK-014 P3) which lists every KaiInstance labelled with the
+    # signed-in user's ID. The TASK-021 P3 deletion cascade also lists
+    # by label before patching delete on each.
+    # `delete` lets the deletion cascade actually remove the user's
+    # KaiInstances during account deletion.
+    verbs: ["get", "list", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get"]
@@ -21,7 +26,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: workspace
-  namespace: emai-swarm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -29,4 +33,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: workspace
-    namespace: emai-swarm
+    namespace: swarm-system

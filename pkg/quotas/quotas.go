@@ -51,6 +51,7 @@ type Limits struct {
 	CPULimit            string        // e.g. "500m"
 	DailyTokens         int64         // OpenRouter token budget per workspace per UTC day; 0 = unbounded
 	DailyMessages       int           // soft cap on user-sent chat messages per UTC day; 0 = unbounded
+	DailyDollars        float64       // per-workspace OpenRouter $ cap minted on the sub-key; 0 = no per-key cap (TASK-019 Phase 2.B)
 	MaxTelegramBots     int           // 0 = unbounded; free tier = 0 (disable Telegram entirely)
 	IdleSuspendAfter    time.Duration // suspend instance after this much inactivity; 0 = never
 	DefaultModel        string        // OpenRouter slug; empty = operator falls back to its legacy default
@@ -75,8 +76,12 @@ var defaults = map[Tier]Limits{
 		CPULimit:            "300m",
 		DailyTokens:         0, // tracked via message cap on free tier
 		DailyMessages:       100,
-		MaxTelegramBots:     0,
-		IdleSuspendAfter:    14 * 24 * time.Hour,
+		// Free uses free OpenRouter models, but the platform still mints a
+		// per-key cap as a defense-in-depth so a compromised key can't run
+		// up paid-model spend. $1/day caps anything that slips through.
+		DailyDollars:     1.0,
+		MaxTelegramBots:  0,
+		IdleSuspendAfter: 14 * 24 * time.Hour,
 		// Free OpenRouter model — zero token cost to the platform. Quality is
 		// "good enough to evaluate Kai"; users wanting better answers upgrade.
 		DefaultModel: "openrouter/stepfun/step-3.5-flash:free",
@@ -89,6 +94,7 @@ var defaults = map[Tier]Limits{
 		CPULimit:            "500m",
 		DailyTokens:         500_000,
 		DailyMessages:       0,
+		DailyDollars:        3.0, // matches "~€2-3/day at retail pricing" headroom for 500k tokens
 		MaxTelegramBots:     1,
 		IdleSuspendAfter:    0,
 		// Haiku 4.5: cheap, fast, good for chat-heavy day-to-day usage. The
@@ -104,6 +110,7 @@ var defaults = map[Tier]Limits{
 		CPULimit:            "1000m",
 		DailyTokens:         2_000_000,
 		DailyMessages:       0,
+		DailyDollars:        12.0, // 4× starter's 500k tokens, slightly under linear scale (margin)
 		MaxTelegramBots:     5,
 		IdleSuspendAfter:    0,
 		DefaultModel:        "openrouter/anthropic/claude-haiku-4-5",

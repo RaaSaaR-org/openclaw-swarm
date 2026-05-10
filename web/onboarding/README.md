@@ -57,13 +57,13 @@ docker build -t emai-onboarding:latest .
 # create the auth token (one-time)
 kubectl create secret generic onboarding-auth \
   --from-literal=token="$(openssl rand -hex 32)" \
-  -n emai-swarm
+  -n swarm-system
 
 # apply manifests (already wired into top-level kustomization)
 kubectl apply -k ../../kubernetes/
 
 # port-forward for access
-kubectl port-forward -n emai-swarm svc/onboarding 8080:8080
+kubectl port-forward -n swarm-system svc/onboarding 8080:8080
 # open http://localhost:8080 and paste the token
 ```
 
@@ -87,7 +87,7 @@ Validation runs before the K8s call, so empty/invalid input always returns 400 r
 |-------------------|---------------|------------------------------------------------|
 | `ADMIN_TOKEN`     | (required)    | Bearer token; loaded from `onboarding-auth` Secret in cluster |
 | `ADDR`            | `:8080`       | Listen address                                 |
-| `SWARM_NAMESPACE` | `emai-swarm`  | Namespace where `KaiInstance`s are created     |
+| `SWARM_NAMESPACE` | `swarm-system`  | Namespace where `KaiInstance`s are created     |
 | `KUBECONFIG`      | (auto)        | Used outside cluster; in-cluster config first  |
 
 ## What this is not

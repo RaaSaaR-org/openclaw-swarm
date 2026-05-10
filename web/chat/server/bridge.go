@@ -19,7 +19,7 @@ import (
 
 var kaiInstanceGVR = schema.GroupVersionResource{
 	Group:    "swarm.emai.io",
-	Version:  "v1alpha1",
+	Version:  "v1alpha2",
 	Resource: "kaiinstances",
 }
 

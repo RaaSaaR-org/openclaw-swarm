@@ -32,7 +32,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	swarmv1alpha1 "github.com/emai-ai/swarm-operator/api/v1alpha1"
+	swarmv1alpha2 "github.com/emai-ai/swarm-operator/api/v1alpha2"
 )
 
 var _ = Describe("KaiInstance Controller", func() {
@@ -56,7 +56,7 @@ var _ = Describe("KaiInstance Controller", func() {
 		for i := 0; i < 5; i++ {
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
-			var kai swarmv1alpha1.KaiInstance
+			var kai swarmv1alpha2.KaiInstance
 			err = k8sClient.Get(ctx, typeNamespacedName, &kai)
 			if errors.IsNotFound(err) {
 				return
@@ -66,13 +66,13 @@ var _ = Describe("KaiInstance Controller", func() {
 
 	BeforeEach(func() {
 		By("creating the KaiInstance resource")
-		resource := &swarmv1alpha1.KaiInstance{
+		resource := &swarmv1alpha2.KaiInstance{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      resourceName,
 				Namespace: "default",
 			},
-			Spec: swarmv1alpha1.KaiInstanceSpec{
-				CustomerName: "Test Customer",
+			Spec: swarmv1alpha2.KaiInstanceSpec{
+				TenantName: "Test Customer",
 				ProjectName:  "Test Project",
 			},
 		}
@@ -84,7 +84,7 @@ var _ = Describe("KaiInstance Controller", func() {
 
 	AfterEach(func() {
 		By("deleting the KaiInstance and draining the finalizer")
-		var resource swarmv1alpha1.KaiInstance
+		var resource swarmv1alpha2.KaiInstance
 		err := k8sClient.Get(ctx, typeNamespacedName, &resource)
 		if err != nil && errors.IsNotFound(err) {
 			return
@@ -99,9 +99,9 @@ var _ = Describe("KaiInstance Controller", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 		Expect(err).NotTo(HaveOccurred())
 
-		var kai swarmv1alpha1.KaiInstance
+		var kai swarmv1alpha2.KaiInstance
 		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
-		Expect(controllerutil.ContainsFinalizer(&kai, swarmv1alpha1.KaiInstanceFinalizer)).To(BeTrue())
+		Expect(controllerutil.ContainsFinalizer(&kai, swarmv1alpha2.KaiInstanceFinalizer)).To(BeTrue())
 	})
 
 	It("provisions all child resources with ownerRefs and tracks observedGeneration", func() {
@@ -112,9 +112,9 @@ var _ = Describe("KaiInstance Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		var kai swarmv1alpha1.KaiInstance
+		var kai swarmv1alpha2.KaiInstance
 		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
-		slug := kai.Status.CustomerSlug
+		slug := kai.Status.TenantSlug
 		Expect(slug).NotTo(BeEmpty())
 		Expect(kai.Status.ObservedGeneration).To(Equal(kai.Generation))
 
@@ -140,6 +140,57 @@ var _ = Describe("KaiInstance Controller", func() {
 		expectChild(&corev1.Secret{}, chatBridgeSecretName(slug))
 	})
 
+	It("only publishes ExternalURL once the Ingress is admitted by the controller (TASK-017 Phase 2)", func() {
+		r := newReconciler()
+		// Bring the resource up.
+		for i := 0; i < 2; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		var kai swarmv1alpha2.KaiInstance
+		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
+		slug := kai.Status.TenantSlug
+		Expect(slug).NotTo(BeEmpty())
+
+		// Pre-admission: envtest doesn't run an ingress controller, so
+		// `Ingress.Status.LoadBalancer.Ingress` stays empty. ExternalURL
+		// must remain empty and the IngressReady condition must read False.
+		Expect(kai.Status.ExternalURL).To(BeEmpty(), "ExternalURL must not publish before Ingress admission")
+		var foundCond bool
+		for _, c := range kai.Status.Conditions {
+			if c.Type == swarmv1alpha2.ConditionIngressReady {
+				Expect(c.Status).To(Equal(metav1.ConditionFalse), "IngressReady should be False pre-admission")
+				Expect(c.Reason).To(Equal("Pending"))
+				foundCond = true
+				break
+			}
+		}
+		Expect(foundCond).To(BeTrue(), "IngressReady condition should be set")
+
+		// Simulate the ingress controller admitting the resource by
+		// patching the Ingress' Status.LoadBalancer.Ingress.
+		ingName := childName(slug) + "-ws"
+		var ing networkingv1.Ingress
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: ingName, Namespace: kai.Namespace}, &ing)).To(Succeed())
+		ing.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{IP: "203.0.113.10"}}
+		Expect(k8sClient.Status().Update(ctx, &ing)).To(Succeed())
+
+		// Reconcile again — now the gate flips.
+		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
+		Expect(kai.Status.ExternalURL).To(Equal("https://kai.emai.dev/ws/" + slug),
+			"ExternalURL should publish once the LoadBalancer ingress list is non-empty")
+		for _, c := range kai.Status.Conditions {
+			if c.Type == swarmv1alpha2.ConditionIngressReady {
+				Expect(c.Status).To(Equal(metav1.ConditionTrue), "IngressReady should flip to True post-admission")
+				Expect(c.Reason).To(Equal("Admitted"))
+			}
+		}
+	})
+
 	It("removes the finalizer on delete so the object can be garbage-collected", func() {
 		r := newReconciler()
 		// Reconcile until provisioned so the finalizer is in place.
@@ -148,7 +199,7 @@ var _ = Describe("KaiInstance Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		var kai swarmv1alpha1.KaiInstance
+		var kai swarmv1alpha2.KaiInstance
 		Expect(k8sClient.Get(ctx, typeNamespacedName, &kai)).To(Succeed())
 		Expect(k8sClient.Delete(ctx, &kai)).To(Succeed())
 

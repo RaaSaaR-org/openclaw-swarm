@@ -140,6 +140,21 @@ func (s *MemoryStore) MarkEmailVerified(_ context.Context, id string, at time.Ti
 	return nil
 }
 
+// MarkEmailBounced records the most recent provider-reported bounce or
+// complaint for a user. Soft-deleted users are still updated — bouncing
+// during the GDPR grace window is information ops still wants to record.
+func (s *MemoryStore) MarkEmailBounced(_ context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.byID[id]
+	if !ok {
+		return ErrNotFound
+	}
+	t := at.UTC()
+	u.EmailBouncedAt = &t
+	return nil
+}
+
 func (s *MemoryStore) RecordLogin(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

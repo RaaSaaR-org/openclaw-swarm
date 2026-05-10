@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: emai-swarm
+namespace: swarm-system
 
 resources:
   - serviceaccount.yml
@@ -9,3 +9,5 @@ resources:
   - deployment.yml
   - service.yml
   - branding-configmap.yml
+  - gdpr-purge-cronjob.yaml
+  - idle-suspend-cronjob.yaml

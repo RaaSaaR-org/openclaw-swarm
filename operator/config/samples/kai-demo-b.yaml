@@ -1,12 +1,12 @@
-apiVersion: swarm.emai.io/v1alpha1
+apiVersion: swarm.emai.io/v1alpha2
 kind: KaiInstance
 metadata:
   name: kai-demo-customer-b
-  namespace: emai-swarm
+  namespace: swarm-system
 spec:
-  customerName: "Demo Customer B"
+  tenantName: "Demo Customer B"
   projectName: "Research Collaboration"
-  customerSlug: "demo-customer-b"
+  tenantSlug: "demo-customer-b"
   gatewayAuth:
     mode: "token"
     token: "demo-b-dev-token"

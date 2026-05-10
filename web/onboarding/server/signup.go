@@ -38,6 +38,11 @@ type signupConfig struct {
 	From          string        // From: header on signup mail; falls back to pkg/email default
 	IPLimitPerHr  int           // per-IP rate limit; 0 disables
 	Captcha       captchaVerifier
+	// TurnstilePublicSiteKey is the Cloudflare Turnstile *public* site key
+	// (NOT the secret). Surfaced via GET /api/onboarding/config so the SPA
+	// can mount the cf-turnstile widget without a build-time bake. Empty
+	// when no CAPTCHA is configured — the SPA hides the widget.
+	TurnstilePublicSiteKey string
 }
 
 // captchaVerifier is the seam for hCaptcha / Turnstile / etc. Phase 0 ships
@@ -69,6 +74,25 @@ type signupRequest struct {
 // the future; the client already has it.
 type signupResponse struct {
 	Status string `json:"status"` // "verification_sent"
+}
+
+// onboardingConfig is the body of GET /api/onboarding/config. Public,
+// unauthenticated — surfaces ONLY values the SPA needs to render the
+// signup form (Turnstile site key is a public artifact by design).
+type onboardingConfig struct {
+	SignupEnabled       bool   `json:"signupEnabled"`
+	TurnstileSiteKey    string `json:"turnstileSiteKey,omitempty"`
+}
+
+// handleOnboardingConfig returns the SPA's runtime config (TASK-013 Phase
+// 3). Always 200 — the SPA needs to know whether signup is enabled to
+// pick its render path; it doesn't need an auth check for the booleans
+// + public site key.
+func (s *server) handleOnboardingConfig(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, onboardingConfig{
+		SignupEnabled:    s.signup.Enabled,
+		TurnstileSiteKey: s.signup.TurnstilePublicSiteKey,
+	})
 }
 
 // handleSignup is the public POST /api/signup endpoint. Steps:
@@ -264,9 +288,44 @@ func (s *server) handleVerify(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadGateway, fmt.Errorf("verified but workspace provisioning failed: %w", err))
 			return
 		}
+
+		// TASK-019 Phase 2.B: mint a per-workspace OpenRouter key + write it
+		// to the kai-<slug>-openrouter Secret. Operator's resources.go reads
+		// this Secret into OPENROUTER_API_KEY on the agent pod. Failures here
+		// don't roll back the workspace — the operator's pooled-key fallback
+		// keeps the workspace usable; ops can run a re-mint job.
+		s.mintAndStoreOpenRouterKey(r.Context(), slug, u)
+
+		// TASK-020 wire-up: welcome email after the workspace is provisioned.
+		// Best-effort — the user is already verified + provisioned, a missed
+		// welcome email shouldn't fail the verify call. The verify endpoint
+		// is the single chance to send this; there's no resend path today.
+		if err := s.sendWelcomeEmail(r.Context(), u, slug); err != nil {
+			log.Printf("verify: send welcome mail to %s: %v", u.Email, err)
+		}
+
 		resp["workspace"] = slug
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// mintAndStoreOpenRouterKey runs after KaiInstance creation succeeds. Best
+// effort — log + continue on any failure (the operator's pooled-key fallback
+// covers the gap). Skips entirely when the keyMinter is nil (test fixtures
+// or signup-disabled deploys) or when the core client isn't wired (dev mode
+// without a kubeconfig).
+func (s *server) mintAndStoreOpenRouterKey(ctx context.Context, slug string, u *users.User) {
+	if s.keyMinter == nil || s.core == nil {
+		return
+	}
+	key, hash, err := s.keyMinter.MintForWorkspace(ctx, slug, u.Tier)
+	if err != nil {
+		log.Printf("verify: mint OpenRouter key for %s failed (continuing — pooled-key fallback applies): %v", slug, err)
+		return
+	}
+	if err := s.writeOpenRouterSecret(ctx, slug, key, hash); err != nil {
+		log.Printf("verify: write kai-%s-openrouter Secret failed: %v", slug, err)
+	}
 }
 
 // countWorkspacesForUser counts the KaiInstances labelled `swarm.io/user-id=<userID>`.
@@ -323,7 +382,7 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 		app = defaultSignupApp
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      "kai-" + slug,
@@ -340,11 +399,11 @@ func buildSaaSKaiInstance(namespace, slug string, u *users.User, gatewayToken st
 			},
 		},
 		"spec": map[string]any{
-			// Legacy CRD field names — they keep their names until the
-			// v1alpha2 bump bundled with TASK-012 + TASK-024.
-			"customerName": u.Email,
-			"customerSlug": slug,
-			"projectName":  "Workspace",
+			// v1alpha2 (TASK-012 Phase 2.B + TASK-024 Phase 5): tenant-* fields
+			// only. customerName/customerSlug are dropped from the schema.
+			"tenantName":  u.Email,
+			"tenantSlug":  slug,
+			"projectName": "Workspace",
 			// SaaS-direction fields from TASK-012 Phase 2.A.
 			"tier":     tier,
 			"userRef":  u.ID,
@@ -401,6 +460,50 @@ func (s *server) checkVerifyToken(userID, token string, now time.Time) error {
 		return errors.New("signature mismatch")
 	}
 	return nil
+}
+
+// workspaceURLFor returns the URL the welcome email links to. The base URL
+// follows the `KAI_VERIFY_BASE_URL` host (the verify-email base) so the
+// onboarding pod doesn't need to learn the dashboard's separate hostname —
+// in production both share `kai.<domain>`. Empty config falls back to the
+// in-pod relative path; the user's email client will render that as a
+// broken link, which is loud-enough feedback that the deploy is misconfigured.
+func (s *server) workspaceURLFor(slug string) string {
+	base := s.signup.VerifyBaseURL
+	// Strip a `/api/signup` suffix if present so we end at the host root.
+	if i := strings.Index(base, "/api/"); i > 0 {
+		base = base[:i]
+	}
+	if base == "" {
+		return "/workspace/" + slug
+	}
+	return strings.TrimRight(base, "/") + "/workspace/" + slug
+}
+
+// sendWelcomeEmail dispatches the welcome template after a successful
+// verify-and-provision. The template is `welcome` (TASK-020 Phase 1)
+// with data shape {Name, WorkspaceURL}. Returns nil + skips silently when
+// no Sender is wired (test fixtures, signup-disabled deploys).
+func (s *server) sendWelcomeEmail(ctx context.Context, u *users.User, slug string) error {
+	if s.email == nil {
+		return nil
+	}
+	mailLang := email.LangDE
+	if u.Language == users.LangEN {
+		mailLang = email.LangEN
+	}
+	return email.Dispatch(ctx, s.email, email.SendOptions{
+		Template: email.TemplateWelcome,
+		Lang:     mailLang,
+		To:       u.Email,
+		From:     s.signup.From,
+	}, struct {
+		Name         string
+		WorkspaceURL string
+	}{
+		Name:         strings.SplitN(u.Email, "@", 2)[0],
+		WorkspaceURL: s.workspaceURLFor(slug),
+	})
 }
 
 func (s *server) sendVerifyEmail(ctx context.Context, u *users.User, link string, lang users.Lang) error {

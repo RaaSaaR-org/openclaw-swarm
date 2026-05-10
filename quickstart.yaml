@@ -8,32 +8,32 @@
 #    sed "s/REPLACE_WITH_API_KEY/$OPENROUTER_API_KEY/" quickstart.yaml | kubectl apply -f -
 #
 # 3. Wait for the demo agent to start:
-#    kubectl -n emai-swarm get pods -w
+#    kubectl -n swarm-system get pods -w
 #
 # 4. Port-forward and open the chat:
-#    kubectl -n emai-swarm port-forward svc/kai-demo 18789:18789
+#    kubectl -n swarm-system port-forward svc/kai-demo 18789:18789
 #    # Open http://localhost:18789 (token: demo-token)
 
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: emai-swarm
+  name: swarm-system
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: swarm-secrets
-  namespace: emai-swarm
+  namespace: swarm-system
 stringData:
   openrouter-api-key: "REPLACE_WITH_API_KEY"
 ---
-apiVersion: swarm.emai.io/v1alpha1
+apiVersion: swarm.emai.io/v1alpha2
 kind: KaiInstance
 metadata:
   name: kai-demo
-  namespace: emai-swarm
+  namespace: swarm-system
 spec:
-  customerName: "Demo"
+  tenantName: "Demo"
   projectName: "Getting Started"
   gatewayAuth:
     mode: "token"

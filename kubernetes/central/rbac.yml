@@ -4,7 +4,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: kira-kaiinstance-manager
-  namespace: emai-swarm
 rules:
   - apiGroups: ["swarm.emai.io"]
     resources: ["kaiinstances"]
@@ -28,7 +27,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: kira-kaiinstance-manager-binding
-  namespace: emai-swarm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -36,4 +34,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: kira-central
-    namespace: emai-swarm
+    namespace: swarm-system

@@ -49,6 +49,7 @@ type User struct {
 	App              string     // catalog persona slug picked at signup; default DefaultApp
 	CreatedAt        time.Time
 	EmailVerifiedAt  *time.Time // nil until verify-email link clicked
+	EmailBouncedAt   *time.Time // nil = deliverable; non-nil = Resend reported bounce/complaint (TASK-020 Phase 4)
 	DeletedAt        *time.Time // nil = active; non-nil = within GDPR grace window
 	LastLoginAt      *time.Time
 }
@@ -82,6 +83,12 @@ type Store interface {
 	UpdateTier(ctx context.Context, id string, tier Tier) error
 	UpdateStripeCustomerID(ctx context.Context, id, stripeID string) error
 	MarkEmailVerified(ctx context.Context, id string, at time.Time) error
+	// MarkEmailBounced records that Resend (or a successor provider) reported
+	// the user's email as undeliverable. Subsequent send call sites SHOULD
+	// check `User.EmailBouncedAt` and skip — the address is dead, sending
+	// would just damage sender reputation. Idempotent: re-marking the same
+	// user updates the timestamp (the latest bounce is the most useful).
+	MarkEmailBounced(ctx context.Context, id string, at time.Time) error
 	RecordLogin(ctx context.Context, id string, at time.Time) error
 	SoftDelete(ctx context.Context, id string, at time.Time) error
 	// PurgeDeletedBefore hard-deletes every User with `deleted_at` strictly

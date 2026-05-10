@@ -20,13 +20,17 @@ import (
 )
 
 // captureSender is a tiny in-memory email.Sender for tests so we can assert
-// what got rendered without hitting disk.
+// what got rendered without hitting disk. `last` is the most-recent email;
+// `all` is the full ordered list — useful when one flow fires more than
+// one email (signup → verify, then verify-success → welcome).
 type captureSender struct {
 	last *email.Message
+	all  []email.Message
 }
 
 func (c *captureSender) Send(_ context.Context, m email.Message) error {
 	c.last = &m
+	c.all = append(c.all, m)
 	return nil
 }
 
@@ -42,7 +46,7 @@ func newSignupServer(t *testing.T) (*server, *captureSender) {
 	}
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds)
 	s := &server{
-		namespace: "emai-swarm",
+		namespace: "swarm-system",
 		dyn:       dyn,
 		users:     users.NewMemoryStore(),
 		email:     cap,
@@ -239,8 +243,46 @@ func TestHandleVerifyProvisionsKaiInstance(t *testing.T) {
 	if spec["appRef"] != defaultSignupApp {
 		t.Errorf("spec.appRef = %v, want %s", spec["appRef"], defaultSignupApp)
 	}
-	if spec["customerSlug"] != wantSlug {
-		t.Errorf("spec.customerSlug = %v, want %s", spec["customerSlug"], wantSlug)
+	if spec["tenantSlug"] != wantSlug {
+		t.Errorf("spec.tenantSlug = %v, want %s", spec["tenantSlug"], wantSlug)
+	}
+}
+
+func TestHandleVerifySendsWelcomeEmail(t *testing.T) {
+	t.Parallel()
+	s, cap := newSignupServer(t)
+
+	rr := httptest.NewRecorder()
+	s.handleSignup(rr, signupReq(`{"email":"alice@example.org","password":"correct horse"}`))
+	if len(cap.all) != 1 || cap.all[0].Subject == "" || !strings.Contains(strings.ToLower(cap.all[0].Subject), "bestaetige") {
+		t.Fatalf("expected the verify email first, got %+v", cap.all)
+	}
+
+	link := extractVerifyURL(t, cap.last.Text)
+	parsed, _ := url.Parse(link)
+	id, tok := parsed.Query().Get("id"), parsed.Query().Get("token")
+
+	rr = httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/signup/verify?id="+id+"&token="+tok, nil)
+	s.handleVerify(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("verify: status %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	// Two emails total: verify (sent at signup) + welcome (sent at verify success).
+	if len(cap.all) != 2 {
+		t.Fatalf("expected 2 emails (verify + welcome), got %d:\n%+v", len(cap.all), cap.all)
+	}
+	welcome := cap.all[1]
+	if welcome.To != "alice@example.org" {
+		t.Errorf("welcome To = %q", welcome.To)
+	}
+	if !strings.Contains(strings.ToLower(welcome.Subject), "willkommen") {
+		t.Errorf("welcome subject should be German (default lang DE), got %q", welcome.Subject)
+	}
+	wantSlug := slugFromUserID(id)
+	if !strings.Contains(welcome.HTML, "/workspace/"+wantSlug) {
+		t.Errorf("welcome HTML missing workspace URL for %s\n%s", wantSlug, welcome.HTML)
 	}
 }
 
@@ -357,7 +399,7 @@ func TestHandleVerifyRefuses402WhenTierCapReached(t *testing.T) {
 	// another", which the dashboard "create another workspace" flow (Phase 3)
 	// will exercise on the same code path.
 	existing := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "swarm.emai.io/v1alpha1",
+		"apiVersion": "swarm.emai.io/v1alpha2",
 		"kind":       "KaiInstance",
 		"metadata": map[string]any{
 			"name":      "kai-pre-existing",

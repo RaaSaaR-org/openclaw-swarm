@@ -4,7 +4,7 @@ aliases:
 - TASK-023
 title: 'Three-repo split: swarm (public) / swarm-cloud (SaaS) / swarm-emai (internal)'
 slug: three-repo-split-swarm-public-swarm-cloud-saas-swarm-emai-internal
-status: backlog
+status: in-progress
 priority: 2
 owner: ''
 projects: []
@@ -17,7 +17,7 @@ sprint: ''
 depends_on: []
 due_date: ''
 created: 2026-05-03
-updated: 2026-05-03
+updated: 2026-05-10
 ---
 
 
@@ -57,6 +57,25 @@ One operator codebase, two deployment shapes, no forking.
 5. Update READMEs in all three to explain the boundary.
 6. CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
 
+## Status
+
+**Phase 3 (`gh repo rename swarm-config → swarm-emai`) — done** before this task tracked phases. The sibling private repo at `~/develop/emai/swarm-emai` has its own history (latest commit `3eb41f9`) and the rename took place in the same window as the v0.2.x SaaS sprint. CI / deploy scripts in swarm-emai already reference the new name.
+
+**Phase 2 (create `swarm-cloud` repo) — partial, 2026-05-10**: directory exists at `~/develop/emai/swarm-cloud`, `git init` done, three clean root commits on `main` (scaffolding, marketing site, K8s overlay + deploy.sh). No GitHub remote yet — user adds + pushes when ready. Marketing site (TASK-022 Phase 0/1/4) and K8s overlay (kubernetes/cloud + dev) all live there now; swarm-emai's deploy script is unchanged.
+
+**Phase 1 — namespace decoupling for stranger-fork hardening — done** on 2026-05-10. AC #3 ("Public `swarm` repo can be cloned by a stranger and run end-to-end without any EmAI dependency") was blocked by `emai-swarm` being baked in everywhere as the namespace. Now the public swarm defaults to **`swarm-system`** and is fully namespace-agnostic at the per-app manifest level:
+- `kubernetes/namespace.yml` + top-level `kubernetes/kustomization.yml` create + label `swarm-system`. Per-app subdirectories (`chat/`, `workspace/`, `onboarding/`, `admin-console/`, `status-page/`, `central/`, `customer/`, `cert-manager/`) no longer carry `metadata.namespace:` on namespaced resources, so `kubectl --namespace=<X> apply -f kubernetes/<app>/` puts them in `<X>` without a manifest conflict.
+- The 5 web app deployments now read `SWARM_NAMESPACE` from the **Kubernetes downward API** (`fieldRef.fieldPath: metadata.namespace`) instead of a hardcoded value — each pod auto-discovers its own namespace, so the binary watches whichever namespace the deployment landed in. Defaults in the Go source still fall back to `swarm-system` for fork-local dev runs outside K8s.
+- All scripts (`swarm-ctl.sh`, `health-check-k8s.sh`, `quickstart.yaml`), all docs (`README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/deployment-guide.md`, `docs/api/*.yaml`, `agents/central/TOOLS.md`), all operator config samples, and all test fixtures use `swarm-system` as the public default.
+- `swarm-emai` is unaffected: `environments/cloud/config.sh` pins `NAMESPACE=emai-swarm`, `deploy.sh` runs `kubectl --namespace=$NAMESPACE apply -f $SWARM_DIR/kubernetes/<app>/`, and (because per-app manifests no longer pin a namespace) the kubectl flag now wins. EmAI's existing `emai-swarm` workspaces continue to reconcile without any migration.
+- `swarm-cloud` follows the public default: its kustomize overlay sets `namespace: swarm-system`.
+- All operator + 5 web-app + sibling-module tests green; `kubectl kustomize kubernetes/` produces clean `swarm-system`-targeted output.
+
+**Remaining phases:**
+- Phase 4 — spin up the new `kai-cloud` Hetzner cluster for the SaaS deploy (deploy work, separate from this repo).
+- Phase 5 — README cross-references in all 3 repos. Public swarm + swarm-cloud + swarm-emai all reference each other; swarm-emai's README links swarm but not swarm-cloud (minor polish).
+- Phase 6 — per-repo CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
+
 ## References
 - Pattern: GitLab CE/EE/.com — https://about.gitlab.com/install/ce-or-ee/
 - Pattern: Sentry self-hosted vs Cloud — https://github.com/getsentry/self-hosted
@@ -72,11 +91,11 @@ One operator codebase, two deployment shapes, no forking.
 - Postgres + Resend account creation: when do we provision them? Default: at the same time as `swarm-cloud` repo bootstrap, so the first deploy has a real connection string to wire up.
 
 ## Acceptance Criteria
-- [ ] `swarm-cloud` repo exists, with a working deploy of the public SaaS to a test cluster
-- [ ] `swarm-config` (or `swarm-emai`) deploys EmAI internal tenants as `managed: internal`
-- [ ] Public `swarm` repo can be cloned by a stranger and run end-to-end without any EmAI dependency
-- [ ] `swarm.io/managed:` label distinguishes the two modes; operator + admin-console + billing webhook all respect it
-- [ ] README in each of the 3 repos clearly states scope and links to the other two
+- [ ] `swarm-cloud` repo exists, with a working deploy of the public SaaS to a test cluster (Phase 2 partial: repo + commits exist, GitHub remote + first deploy still pending)
+- [x] `swarm-emai` deploys EmAI internal tenants as `managed: internal` (Phase 3, the rename + relabel landed in the same window as the v0.2.x SaaS sprint)
+- [x] Public `swarm` repo can be cloned by a stranger and run end-to-end without any EmAI dependency (Phase 1, 2026-05-10 — namespace default flipped to `swarm-system`, downward-API for SWARM_NAMESPACE, per-app manifests namespace-agnostic; scripts + docs + tests follow)
+- [x] `swarm.io/managed:` label distinguishes the two modes; operator + admin-console + billing webhook all respect it (operator + billing + onboarding + idle-suspend + usage-monitor all branch on it; admin-console doesn't filter — defensible for an admin tool that intentionally surfaces every instance)
+- [ ] README in each of the 3 repos clearly states scope and links to the other two (swarm + swarm-cloud done; swarm-emai still links swarm only — minor polish)
 
 ## Notes
 **Don't actually split until SaaS work has made enough progress that the boundary is obvious.** Premature splitting forces decisions before we know what belongs where. A reasonable trigger: split once Stripe (TASK-016) is integrated, because Stripe secrets really should not land in `swarm-config`.

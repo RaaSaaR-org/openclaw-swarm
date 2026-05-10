@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS users (
 -- ALTER TABLE ADD COLUMN.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS app TEXT NOT NULL DEFAULT 'personal-assistant';
 
+-- Idempotent `email_bounced_at` column add (TASK-020 Phase 4 — Resend
+-- webhook receiver). Non-nil = provider reported the address as bounced
+-- or complained; future sends should skip these users to protect sender
+-- reputation. Nullable + no default so existing rows aren't touched.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_bounced_at TIMESTAMPTZ;
+
 -- deletion_audit (TASK-021 Phase 5): records every soft-delete + the
 -- subsequent hard-purge timestamp without storing PII. Lets us answer
 -- "did we delete user X?" — required for GDPR legal audits — without

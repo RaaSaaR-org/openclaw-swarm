@@ -57,13 +57,13 @@ docker build -t emai-admin-console:latest .
 # create the auth token (one-time)
 kubectl create secret generic admin-console-auth \
   --from-literal=token="$(openssl rand -hex 32)" \
-  -n emai-swarm
+  -n swarm-system
 
 # apply manifests (already wired into top-level kustomization)
 kubectl apply -k ../../kubernetes/
 
 # port-forward for access
-kubectl port-forward -n emai-swarm svc/admin-console 8080:8080
+kubectl port-forward -n swarm-system svc/admin-console 8080:8080
 # open http://localhost:8080 and paste the token
 ```
 
@@ -87,5 +87,5 @@ All `/api/*` routes require `Authorization: Bearer <ADMIN_TOKEN>`.
 |-------------------|---------------|------------------------------------------------|
 | `ADMIN_TOKEN`     | (required)    | Bearer token; loaded from `admin-console-auth` Secret in cluster |
 | `ADDR`            | `:8080`       | Listen address                                 |
-| `SWARM_NAMESPACE` | `emai-swarm`  | Namespace to scope `KaiInstance` lookups       |
+| `SWARM_NAMESPACE` | `swarm-system`  | Namespace to scope `KaiInstance` lookups       |
 | `KUBECONFIG`      | (auto)        | Used outside cluster; in-cluster config first  |

@@ -5,7 +5,6 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: customer-isolation
-  namespace: emai-swarm
 spec:
   # Apply to all customer pods
   podSelector:
@@ -40,7 +39,6 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: central-access
-  namespace: emai-swarm
 spec:
   podSelector:
     matchLabels:
