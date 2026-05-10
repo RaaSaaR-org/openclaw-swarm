@@ -3,14 +3,53 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
+
 	"github.com/emai-ai/swarm/pkg/auth"
 	"github.com/emai-ai/swarm/pkg/users"
 )
+
+// setKaiSuspended flips spec.suspended on the fixture's KaiInstance via the
+// fake dynamic client so tests can model an idle-suspended workspace.
+func setKaiSuspended(t *testing.T, f *fixture, slug string, suspended bool) {
+	t.Helper()
+	obj, err := f.server.dyn.Resource(kaiInstanceGVR).Namespace(f.server.namespace).Get(
+		context.Background(), "kai-"+slug, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("get kai-%s: %v", slug, err)
+	}
+	if err := unstructured.SetNestedField(obj.Object, suspended, "spec", "suspended"); err != nil {
+		t.Fatalf("set spec.suspended: %v", err)
+	}
+	if _, err := f.server.dyn.Resource(kaiInstanceGVR).Namespace(f.server.namespace).Update(
+		context.Background(), obj, metav1.UpdateOptions{},
+	); err != nil {
+		t.Fatalf("update kai-%s: %v", slug, err)
+	}
+}
+
+// kaiSuspended reads spec.suspended on the fixture's KaiInstance.
+func kaiSuspended(t *testing.T, f *fixture, slug string) bool {
+	t.Helper()
+	obj, err := f.server.dyn.Resource(kaiInstanceGVR).Namespace(f.server.namespace).Get(
+		context.Background(), "kai-"+slug, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("get kai-%s: %v", slug, err)
+	}
+	got, _, _ := unstructured.NestedBool(obj.Object, "spec", "suspended")
+	return got
+}
 
 // seedSaaSUser stuffs the workspace's MemoryStore with a verified user and
 // returns the row. The test then exercises the SaaS login branch.
@@ -202,6 +241,127 @@ func TestHandleOwner_RejectsUnauthenticated(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+// TASK-015 Phase 3.B: a successful SaaS login on a suspended workspace must
+// flip spec.suspended back to false so the operator wakes the deployment up.
+func TestHandleLogin_SaaS_ResumesSuspendedWorkspaceOnLogin(t *testing.T) {
+	t.Parallel()
+	tmp := newFixtureWithBinding(t, "acme", nil, "saas", "u_placeholder")
+	u := seedSaaSUser(t, tmp, "alice@acme.de", "correct horse")
+
+	f := newFixtureWithBinding(t, "acme", nil, "saas", u.ID)
+	f.server.users = tmp.server.users
+	setKaiSuspended(t, f, "acme", true)
+
+	req := slugReq(http.MethodPost, "/api/workspace/acme/login", "acme",
+		`{"email":"alice@acme.de","password":"correct horse"}`)
+	rr := httptest.NewRecorder()
+	f.server.handleLogin(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login: %d (%s)", rr.Code, rr.Body.String())
+	}
+	if got := kaiSuspended(t, f, "acme"); got != false {
+		t.Fatalf("spec.suspended after login = %v, want false (login should auto-resume)", got)
+	}
+}
+
+// Workspace already running: login must not issue a no-op patch that bumps
+// the resourceVersion for nothing — keeps the resume contract crisp and
+// avoids unnecessary reconciles on the operator.
+func TestHandleLogin_SaaS_DoesNotPatchWhenNotSuspended(t *testing.T) {
+	t.Parallel()
+	tmp := newFixtureWithBinding(t, "acme", nil, "saas", "u_placeholder")
+	u := seedSaaSUser(t, tmp, "alice@acme.de", "correct horse")
+
+	f := newFixtureWithBinding(t, "acme", nil, "saas", u.ID)
+	f.server.users = tmp.server.users
+	// spec.suspended absent → reads as false; binding.Suspended=false →
+	// resumeWorkspace must not be called.
+
+	// Track Patch calls on the fake dynamic client.
+	var patchCalls int
+	if fc, ok := f.server.dyn.(interface {
+		PrependReactor(verb, resource string, reaction k8stesting.ReactionFunc)
+	}); ok {
+		fc.PrependReactor("patch", "kaiinstances", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			patchCalls++
+			return false, nil, nil // let the default reactor run
+		})
+	} else {
+		t.Fatal("dynamic client does not expose PrependReactor — fixture changed")
+	}
+
+	req := slugReq(http.MethodPost, "/api/workspace/acme/login", "acme",
+		`{"email":"alice@acme.de","password":"correct horse"}`)
+	rr := httptest.NewRecorder()
+	f.server.handleLogin(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login: %d (%s)", rr.Code, rr.Body.String())
+	}
+	if patchCalls != 0 {
+		t.Fatalf("expected 0 patch calls when workspace is not suspended, got %d", patchCalls)
+	}
+}
+
+// Resume is best-effort: a Patch failure in the K8s API must not turn a valid
+// login into a 5xx. The user gets their cookie; they can retry login or ask
+// support if the workspace stays asleep.
+func TestHandleLogin_SaaS_ResumePatchFailureDoesNotBlockLogin(t *testing.T) {
+	t.Parallel()
+	tmp := newFixtureWithBinding(t, "acme", nil, "saas", "u_placeholder")
+	u := seedSaaSUser(t, tmp, "alice@acme.de", "correct horse")
+
+	f := newFixtureWithBinding(t, "acme", nil, "saas", u.ID)
+	f.server.users = tmp.server.users
+	setKaiSuspended(t, f, "acme", true)
+
+	if fc, ok := f.server.dyn.(interface {
+		PrependReactor(verb, resource string, reaction k8stesting.ReactionFunc)
+	}); ok {
+		fc.PrependReactor("patch", "kaiinstances", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("simulated apiserver outage")
+		})
+	} else {
+		t.Fatal("dynamic client does not expose PrependReactor")
+	}
+
+	req := slugReq(http.MethodPost, "/api/workspace/acme/login", "acme",
+		`{"email":"alice@acme.de","password":"correct horse"}`)
+	rr := httptest.NewRecorder()
+	f.server.handleLogin(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login: %d (%s) — patch failures must not block login", rr.Code, rr.Body.String())
+	}
+	cookies := rr.Result().Cookies()
+	var sess *http.Cookie
+	for _, c := range cookies {
+		if c.Name == auth.SessionCookieName {
+			sess = c
+		}
+	}
+	if sess == nil {
+		t.Fatalf("expected session cookie even when resume patch failed, got %v", cookies)
+	}
+}
+
+// loadKaiBinding must parse spec.suspended; the login handler relies on it
+// to gate the resume call.
+func TestLoadKaiBinding_ParsesSuspended(t *testing.T) {
+	t.Parallel()
+	f := newFixtureWithBinding(t, "acme", nil, "saas", "u_x")
+	setKaiSuspended(t, f, "acme", true)
+
+	binding, err := f.server.loadKaiBinding(context.Background(), "acme")
+	if err != nil {
+		t.Fatalf("loadKaiBinding: %v", err)
+	}
+	if !binding.Suspended {
+		t.Errorf("Suspended = false, want true")
 	}
 }
 

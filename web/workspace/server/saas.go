@@ -9,6 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/emai-ai/swarm/pkg/auth"
 	"github.com/emai-ai/swarm/pkg/users"
@@ -18,8 +19,10 @@ import (
 // KaiInstance: the management mode and (for SaaS-managed) the user reference.
 // Returned by loadKaiBinding so callers don't pass unstructured around.
 type kaiBinding struct {
-	Managed string // "saas" | "internal" | "" (legacy / unset)
-	UserRef string // u_<ulid> for SaaS; empty for internal/legacy
+	Managed   string // "saas" | "internal" | "" (legacy / unset)
+	UserRef   string // u_<ulid> for SaaS; empty for internal/legacy
+	Suspended bool   // mirrors spec.suspended; true → idle-suspend cron (or
+	// admin) scaled this workspace to zero, login should resume it
 }
 
 // IsSaaS reports whether this workspace authenticates against the central
@@ -54,7 +57,27 @@ func (s *server) loadKaiBinding(ctx context.Context, slug string) (kaiBinding, e
 	}
 	managed, _, _ := unstructured.NestedString(obj.Object, "spec", "managed")
 	userRef, _, _ := unstructured.NestedString(obj.Object, "spec", "userRef")
-	return kaiBinding{Managed: managed, UserRef: userRef}, nil
+	suspended, _, _ := unstructured.NestedBool(obj.Object, "spec", "suspended")
+	return kaiBinding{Managed: managed, UserRef: userRef, Suspended: suspended}, nil
+}
+
+// resumeWorkspace patches the named KaiInstance's spec.suspended back to false.
+// TASK-015 Phase 3.B: a successful SaaS login on a suspended workspace flips
+// it back on so the user doesn't have to ask support to wake it. The operator
+// picks up the spec change on its next reconcile (~10s) and scales the
+// Deployment from 0 → 1. Caller should treat errors as best-effort: the login
+// already succeeded, the user's data isn't at risk, and the worst case is
+// "user retries in a minute". A merge patch is used so we never accidentally
+// clobber other spec fields the operator may have written.
+func (s *server) resumeWorkspace(ctx context.Context, slug string) error {
+	if s.dyn == nil {
+		return errors.New("no dynamic client")
+	}
+	patch := []byte(`{"spec":{"suspended":false}}`)
+	_, err := s.dyn.Resource(kaiInstanceGVR).Namespace(s.namespace).Patch(
+		ctx, "kai-"+slug, types.MergePatchType, patch, metav1.PatchOptions{},
+	)
+	return err
 }
 
 // loginSaaS validates an email+password against the central users.Store and,

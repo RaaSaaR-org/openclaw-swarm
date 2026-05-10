@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -75,6 +76,19 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid login"})
 			return
+		}
+		// TASK-015 Phase 3.B: a successful login on a suspended free-tier
+		// workspace flips spec.suspended=false so the operator can scale the
+		// Deployment back to 1. Best-effort — login still succeeds even if the
+		// patch fails; the user retries / asks support in the rare failure
+		// case. Cookie is issued either way so the SPA can render and a
+		// follow-up request will pick up the resumed pod within ~10s.
+		if binding.Suspended {
+			if err := s.resumeWorkspace(r.Context(), slug); err != nil {
+				log.Printf("login: resume suspended workspace slug=%s user=%s: %v", slug, u.ID, err)
+			} else {
+				log.Printf("login: resumed suspended workspace slug=%s user=%s", slug, u.ID)
+			}
 		}
 		if err := s.issueAndSetSessionWithUID(w, slug, u.Email, u.ID, jwtSecret); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "session"})
@@ -240,6 +254,38 @@ func (s *server) handleAuthInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": false, "needsSetup": needsSetup})
+}
+
+// handleForwardAuth is the upstream for Traefik's forwardAuth middleware. It
+// verifies the workspace session cookie against the requested slug and either
+// allows the original request through (204 + X-Auth-Email) or redirects the
+// browser to the login page. Used to gate the read-only `mc serve` dashboards
+// at /hq/<slug> with the same login customers already use for /workspace/<slug>.
+func (s *server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	if !slugRegex.MatchString(slug) || len(slug) > 63 {
+		http.Error(w, "invalid slug", http.StatusBadRequest)
+		return
+	}
+
+	if claims, ok := s.authedClaims(r, slug); ok {
+		w.Header().Set("X-Auth-Email", claims.Sub)
+		if claims.Uid != "" {
+			w.Header().Set("X-Auth-Uid", claims.Uid)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Not authenticated. Redirect the browser to the workspace login. Traefik
+	// forwards the auth-server response body to the client, so the redirect
+	// reaches the user. We pass the original URI as `?return=` so the SPA can
+	// optionally bounce back after login.
+	loginPath := "/workspace/" + slug + "/"
+	if returnURI := r.Header.Get("X-Forwarded-Uri"); returnURI != "" {
+		loginPath += "?return=" + url.QueryEscape(returnURI)
+	}
+	http.Redirect(w, r, loginPath, http.StatusFound)
 }
 
 // issueAndSetSession is a thin wrapper that signs a JWT cookie via pkg/auth and writes it.
