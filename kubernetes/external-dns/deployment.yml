@@ -29,7 +29,7 @@ spec:
             - --source=service
             - --provider=hetzner
             - --domain-filter=kai.example.org   # OVERRIDE
-            - --txt-owner-id=kai-cloud           # OVERRIDE per cluster
+            - --txt-owner-id=swarm-cloud         # OVERRIDE per cluster
             - --policy=upsert-only               # never delete records on its own
             - --interval=2m
             - --log-format=json

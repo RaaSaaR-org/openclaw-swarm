@@ -45,7 +45,7 @@ One operator codebase, two deployment shapes, no forking.
 
 ## Decided
 - **Naming: rename `swarm-config` → `swarm-emai`** (locked in 2026-05-03 — see [[PROP-003]]). One-shot `gh repo rename` + clones / CI / deploy-script updates. Worth the half-hour for years of cleaner symmetry with `swarm-cloud`.
-- **Cluster topology: two clusters** (locked in 2026-05-03 — see [[PROP-003]]). New `kai-cloud` cluster for SaaS; existing `emai-cloud` keeps EmAI internal tenants. ~€15/mo extra; SaaS abuse never affects internal customers.
+- **Cluster topology: two clusters** (locked in 2026-05-03 — see [[PROP-003]], originally named `kai-cloud` and renamed `swarm-cloud` on 2026-05-10 for symmetry with the repo). New `swarm-cloud` cluster for SaaS; existing `emai-cloud` keeps EmAI internal tenants. ~€15/mo extra; SaaS abuse never affects internal customers.
 - **Trigger to actually split:** wait until [[TASK-016]] (Stripe billing) is integrated. Stripe secrets really should not land in `swarm-config`; that's the natural forcing function. Until then code lives in `swarm` annotated for what will move where.
 - **Coexistence label:** `swarm.io/managed: {internal|saas}` (post-[[TASK-024]]; today `swarm.emai.io/managed`). One operator codebase, two deployment shapes, no forking.
 
@@ -53,7 +53,7 @@ One operator codebase, two deployment shapes, no forking.
 1. Audit `swarm` for EmAI-specific bits — see [[TASK-024]].
 2. Create `swarm-cloud` repo, seed with the bits of current production deploy that don't belong in either of the other two.
 3. `gh repo rename swarm-config swarm-emai`; update CI, deploy scripts, any tooling that hardcodes the name.
-4. Spin up the new `kai-cloud` cluster on Hetzner.
+4. Spin up the new `swarm-cloud` cluster on Hetzner.
 5. Update READMEs in all three to explain the boundary.
 6. CI: each repo runs its own checks; `swarm-cloud` and `swarm-emai` test against the latest tagged `swarm` release.
 
@@ -61,7 +61,7 @@ One operator codebase, two deployment shapes, no forking.
 
 **Phase 3 (`gh repo rename swarm-config → swarm-emai`) — done** before this task tracked phases. The sibling private repo at `~/develop/emai/swarm-emai` has its own history (latest commit `3eb41f9`) and the rename took place in the same window as the v0.2.x SaaS sprint. CI / deploy scripts in swarm-emai already reference the new name.
 
-**Phase 2 (create `swarm-cloud` repo) — done, 2026-05-10**: directory exists at `~/develop/emai/swarm-cloud`, three clean root commits on `main` (scaffolding, marketing site, K8s overlay + deploy.sh), pushed to **github.com/MIND-Studio/swarm-cloud** (private). Marketing site (TASK-022 Phase 0/1/4) and K8s overlay (kubernetes/cloud + dev) all live there now; swarm-emai's deploy script is unchanged. The "working deploy" half of AC #1 (a real `deploy.sh cloud` run against the new kai-cloud cluster) is Phase 4.
+**Phase 2 (create `swarm-cloud` repo) — done, 2026-05-10**: directory exists at `~/develop/emai/swarm-cloud`, three clean root commits on `main` (scaffolding, marketing site, K8s overlay + deploy.sh), pushed to **github.com/MIND-Studio/swarm-cloud** (private). Marketing site (TASK-022 Phase 0/1/4) and K8s overlay (kubernetes/cloud + dev) all live there now; swarm-emai's deploy script is unchanged. The "working deploy" half of AC #1 (a real `deploy.sh cloud` run against the new `swarm-cloud` cluster) is Phase 4.
 
 **Phase 1 — namespace decoupling for stranger-fork hardening — done** on 2026-05-10. AC #3 ("Public `swarm` repo can be cloned by a stranger and run end-to-end without any EmAI dependency") was blocked by `emai-swarm` being baked in everywhere as the namespace. Now the public swarm defaults to **`swarm-system`** and is fully namespace-agnostic at the per-app manifest level:
 - `kubernetes/namespace.yml` + top-level `kubernetes/kustomization.yml` create + label `swarm-system`. Per-app subdirectories (`chat/`, `workspace/`, `onboarding/`, `admin-console/`, `status-page/`, `central/`, `customer/`, `cert-manager/`) no longer carry `metadata.namespace:` on namespaced resources, so `kubectl --namespace=<X> apply -f kubernetes/<app>/` puts them in `<X>` without a manifest conflict.
@@ -80,7 +80,7 @@ One operator codebase, two deployment shapes, no forking.
 Pinning the openclaw-swarm checkout to the latest tagged release (instead of `main`) is a refinement once the public swarm starts cutting releases. swarm-emai's CI is its own task — its deploy.sh applies public manifests directly so a CI smoke (`kustomize build ../swarm/kubernetes/...` + dry-run apply) is the natural next step there.
 
 **Remaining phases:**
-- Phase 4 — spin up the new `kai-cloud` Hetzner cluster for the SaaS deploy + run `swarm-cloud/deploy.sh cloud`. Deploy work, separate from this repo. Closes the "working deploy of the public SaaS to a test cluster" half of AC #1, and likely flips most of TASK-017's open AC at the same time.
+- Phase 4 — spin up the new `swarm-cloud` Hetzner cluster for the SaaS deploy + run `swarm-cloud/deploy.sh cloud`. Deploy work, separate from this repo. Closes the "working deploy of the public SaaS to a test cluster" half of AC #1, and likely flips most of TASK-017's open AC at the same time. Local-dev runs of `deploy.sh dev` against the existing `k3d-emai-swarm` cluster (with namespace `swarm-system`) are the no-cost rehearsal step before the Hetzner spin-up.
 
 ## References
 - Pattern: GitLab CE/EE/.com — https://about.gitlab.com/install/ce-or-ee/
