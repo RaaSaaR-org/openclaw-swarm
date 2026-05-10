@@ -4,7 +4,7 @@ aliases:
 - TASK-023
 title: 'Three-repo split: swarm (public) / swarm-cloud (SaaS) / swarm-emai (internal)'
 slug: three-repo-split-swarm-public-swarm-cloud-saas-swarm-emai-internal
-status: in-progress
+status: done
 priority: 2
 owner: ''
 projects: []
@@ -97,7 +97,7 @@ Pinning the openclaw-swarm checkout to the latest tagged release (instead of `ma
 - Postgres + Resend account creation: when do we provision them? Default: at the same time as `swarm-cloud` repo bootstrap, so the first deploy has a real connection string to wire up.
 
 ## Acceptance Criteria
-- [ ] `swarm-cloud` repo exists, with a working deploy of the public SaaS to a test cluster (Phase 2 partial: repo + commits exist, GitHub remote + first deploy still pending)
+- [x] `swarm-cloud` repo exists, with a working deploy of the public SaaS to a test cluster (2026-05-10 — pushed to **github.com/MIND-Studio/swarm-cloud**; full SaaS flow validated end-to-end on the dedicated `k3d-swarm-cloud` cluster: signup → verify → workspace login → Stripe Checkout (`cs_test_…`) → request-deletion → cascade. Production Hetzner cluster spin-up tracked separately as Phase 4.)
 - [x] `swarm-emai` deploys EmAI internal tenants as `managed: internal` (Phase 3, the rename + relabel landed in the same window as the v0.2.x SaaS sprint)
 - [x] Public `swarm` repo can be cloned by a stranger and run end-to-end without any EmAI dependency (Phase 1, 2026-05-10 — namespace default flipped to `swarm-system`, downward-API for SWARM_NAMESPACE, per-app manifests namespace-agnostic; scripts + docs + tests follow)
 - [x] `swarm.io/managed:` label distinguishes the two modes; operator + admin-console + billing webhook all respect it (operator + billing + onboarding + idle-suspend + usage-monitor all branch on it; admin-console doesn't filter — defensible for an admin tool that intentionally surfaces every instance)
