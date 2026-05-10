@@ -4,7 +4,7 @@ aliases:
 - TASK-022
 title: SaaS marketing landing + pricing page (separate from NeoDEM landing)
 slug: saas-marketing-landing-pricing-page-separate-from-neodem-landing
-status: in-progress
+status: done
 priority: 3
 owner: ''
 projects: []

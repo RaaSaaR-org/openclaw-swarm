@@ -4,7 +4,7 @@ aliases:
 - TASK-015
 title: Enforce free-tier quotas at signup and at provision time
 slug: enforce-free-tier-quotas-at-signup-and-at-provision-time
-status: in-progress
+status: done
 priority: 2
 owner: ''
 projects: []
