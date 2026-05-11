@@ -338,6 +338,47 @@ func TestHandleForwardAuth_UnauthedRedirectsToLogin(t *testing.T) {
 	}
 }
 
+func TestHandleForwardAuth_UnauthedAbsoluteRedirectUsesXForwarded(t *testing.T) {
+	t.Parallel()
+	// When Traefik is in the path, it sets X-Forwarded-Host + X-Forwarded-Proto
+	// on the forwardAuth request. The redirect MUST be absolute against the
+	// public origin — otherwise Traefik resolves the relative path against
+	// the auth-server's in-cluster URL and the browser gets a redirect to a
+	// hostname it cannot resolve.
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+	req := slugReq(http.MethodGet, "/api/workspace/acme/forward-auth", "acme", "")
+	req.Header.Set("X-Forwarded-Uri", "/hq/acme/tasks")
+	req.Header.Set("X-Forwarded-Host", "kai.emai.dev")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "https://kai.emai.dev/workspace/acme/") {
+		t.Errorf("expected absolute https://kai.emai.dev/workspace/acme/... got %q", loc)
+	}
+	if !strings.Contains(loc, "return=") {
+		t.Errorf("expected return query param, got %q", loc)
+	}
+}
+
+func TestHandleForwardAuth_UnauthedAbsoluteDefaultsToHttps(t *testing.T) {
+	t.Parallel()
+	// X-Forwarded-Host present without X-Forwarded-Proto. Default to https
+	// since this endpoint is only meant to be exposed over TLS; an http
+	// fallback would be a downgrade vector.
+	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})
+	req := slugReq(http.MethodGet, "/api/workspace/acme/forward-auth", "acme", "")
+	req.Header.Set("X-Forwarded-Host", "kai.emai.dev")
+	rr := httptest.NewRecorder()
+	f.server.handleForwardAuth(rr, req)
+	if got := rr.Header().Get("Location"); !strings.HasPrefix(got, "https://kai.emai.dev/workspace/acme/") {
+		t.Errorf("expected https://... default, got %q", got)
+	}
+}
+
 func TestHandleForwardAuth_WrongSlugRedirects(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "acme", []userRecord{{Email: "alice@acme.de", PasswordHash: "x"}})

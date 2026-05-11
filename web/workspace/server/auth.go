@@ -277,15 +277,26 @@ func (s *server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Not authenticated. Redirect the browser to the workspace login. Traefik
-	// forwards the auth-server response body to the client, so the redirect
-	// reaches the user. We pass the original URI as `?return=` so the SPA can
-	// optionally bounce back after login.
+	// Not authenticated. Redirect the browser to the workspace login. We must
+	// emit an ABSOLUTE Location built from the X-Forwarded-* headers Traefik
+	// adds when it calls this endpoint as a forwardAuth target. If we return
+	// a relative path, Traefik resolves it against the auth-server's own URL
+	// (http://workspace.<ns>.svc:8080/...) and forwards THAT absolute URL to
+	// the client, which is in-cluster DNS the browser cannot resolve. We pass
+	// the original URI as `?return=` so the SPA can bounce back after login.
 	loginPath := "/workspace/" + slug + "/"
 	if returnURI := r.Header.Get("X-Forwarded-Uri"); returnURI != "" {
 		loginPath += "?return=" + url.QueryEscape(returnURI)
 	}
-	http.Redirect(w, r, loginPath, http.StatusFound)
+	loginURL := loginPath
+	if host := r.Header.Get("X-Forwarded-Host"); host != "" {
+		proto := r.Header.Get("X-Forwarded-Proto")
+		if proto == "" {
+			proto = "https"
+		}
+		loginURL = proto + "://" + host + loginPath
+	}
+	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
 // issueAndSetSession is a thin wrapper that signs a JWT cookie via pkg/auth and writes it.
